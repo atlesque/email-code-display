@@ -26,13 +26,17 @@ async function refresh() {
       const name = document.createElement("strong");
       name.textContent = account.email;
       const status = document.createElement("p");
-      status.textContent =
-        account.provider.toUpperCase() +
-        " · " +
-        account.status +
-        (account.last_checked
-          ? " · " + new Date(account.last_checked).toLocaleTimeString()
-          : "");
+      const badge = document.createElement("span");
+      badge.className =
+        "badge" + (account.status === "connected" ? "" : " warn");
+      badge.textContent = account.status;
+      status.append(
+        account.provider === "gmail" ? "Gmail" : "Outlook",
+        badge,
+        account.last_checked
+          ? new Date(account.last_checked).toLocaleTimeString()
+          : "",
+      );
       info.append(name, status);
       const disconnect = document.createElement("button");
       disconnect.className = "secondary";
@@ -93,5 +97,11 @@ $("test").onclick = async () => {
   }
 };
 
+$("today").textContent = new Date().toLocaleDateString(undefined, {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
 refresh();
 setInterval(refresh, 15000);
