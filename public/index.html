@@ -73,11 +73,21 @@
               </svg>
               Display
             </span>
+            <span id="screen-state" class="badge"></span>
           </div>
-          <div class="display-preview">
-            <div class="display-heading">EMAIL CODE DISPLAY</div>
-            <div class="display-code">123456</div>
-          </div>
+          <button
+            id="screen"
+            class="display-preview asleep"
+            type="button"
+            aria-label="Wake display preview"
+          >
+            <span class="display-content">
+              <span class="display-heading">EMAIL CODE DISPLAY</span>
+              <span id="screen-service" class="display-service"></span>
+              <span id="screen-code" class="display-code"></span>
+              <span id="screen-footer" class="display-footer"></span>
+            </span>
+          </button>
           <div class="actions">
             <button id="test">Send test code</button
             ><a href="/cdn-cgi/access/logout" class="button secondary"
