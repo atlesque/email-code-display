@@ -7,6 +7,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <Wire.h>
 #include <time.h>
 
 // Retain Wi-Fi association and verified TLS; reconnecting each poll costs
@@ -25,7 +26,48 @@ uint32_t pollInterval = POLL_MS, reconnectInterval = 15000;
 bool pressed = false, screenSleeping = false, backlightPwm = false;
 bool wasConnected = false, wasClockReady = false, pollNow = true;
 uint8_t brightness = 0;
+int batteryPercent = -1;
+uint32_t lastBatteryRead = 0;
 const uint16_t BG = 0x0945, MINT = 0xC758, MUTED = 0x6D10;
+
+// Read the onboard MAX17048 without resetting its learned charge state.
+bool readBatteryRegister(uint8_t reg, uint16_t &value) {
+  Wire.beginTransmission(0x36);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0 ||
+      Wire.requestFrom(uint8_t(0x36), uint8_t(2)) != 2)
+    return false;
+  value = uint16_t(Wire.read()) << 8;
+  value |= Wire.read();
+  return true;
+}
+void renderBattery() {
+  if (screenSleeping)
+    return;
+  tft.fillRect(214, 9, 20, 10, BG);
+  uint16_t color = batteryPercent >= 0 && batteryPercent <= 20
+                       ? ST77XX_RED : MUTED;
+  tft.drawRect(215, 10, 16, 8, color);
+  tft.fillRect(231, 12, 2, 4, color);
+  if (batteryPercent < 0)
+    tft.drawFastHLine(220, 14, 6, MUTED);
+  else if (batteryPercent > 0)
+    tft.fillRect(217, 12, max(1, (batteryPercent * 12 + 50) / 100), 4,
+                 batteryPercent <= 20 ? ST77XX_RED : MINT);
+}
+void updateBattery() {
+  lastBatteryRead = millis();
+  uint16_t version, voltage, charge;
+  int next = -1;
+  if (readBatteryRegister(0x08, version) && (version & 0xFFF0) == 0x0010 &&
+      readBatteryRegister(0x02, voltage) && voltage >= 25600 &&
+      voltage <= 64000 && readBatteryRegister(0x04, charge))
+    next = min(100, int((uint32_t(charge) + 128) / 256));
+  if (next != batteryPercent) {
+    batteryPercent = next;
+    renderBattery();
+  }
+}
 
 // Decode chunked HTTP/1.1 into a bounded sink. Consume the complete response
 // before reusing a socket; close it on errors or oversized responses.
@@ -83,6 +125,7 @@ void render() {
     return;
   tft.fillScreen(BG);
   center("EMAIL CODE DISPLAY", 10, 1, MUTED);
+  renderBattery();
   tft.drawFastHLine(12, 29, 216, MUTED);
   if (code.length()) {
     center(ascii(service), 40, 1, MINT);
@@ -225,6 +268,9 @@ void setup() {
   tft.init(135, 240);
   tft.setRotation(3);
   tft.setTextWrap(false);
+  Wire.begin();
+  Wire.setTimeOut(50);
+  updateBattery();
   backlightPwm = ledcAttach(TFT_BACKLITE, 5000, 8);
   pinMode(0, INPUT_PULLUP);
   screenActivity = lastTick = millis();
@@ -247,6 +293,8 @@ void setup() {
 }
 void loop() {
   tickCode();
+  if (millis() - lastBatteryRead >= 30000)
+    updateBattery();
   bool down = digitalRead(0) == LOW;
   if (down && !pressed) {
     screenActivity = millis();
