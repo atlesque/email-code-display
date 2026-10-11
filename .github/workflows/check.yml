@@ -12,3 +12,5 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+      - name: Firmware power and timing scenarios
+        run: c++ -std=c++11 test/firmware_power.test.cpp -o /tmp/email-code-display-power-test && /tmp/email-code-display-power-test
