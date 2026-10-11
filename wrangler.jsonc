@@ -23,7 +23,7 @@
   ],
   "vars": {
     "PUBLIC_BASE_URL": "https://codes.atlesque.dev",
-    "GOOGLE_CLIENT_ID": "",
+    "GOOGLE_CLIENT_ID": "426701478658-rtqlksv1thd4fl7vqh0o3ik4svehb8sk.apps.googleusercontent.com",
     "MICROSOFT_CLIENT_ID": "",
     "MICROSOFT_TENANT": "common",
     "AI_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
