@@ -1,6 +1,6 @@
 import { env, exports } from "cloudflare:workers";
-import { beforeEach, describe, it, expect } from "vitest";
-import { encrypt, decrypt, admin, session } from "../src/security";
+import { beforeAll, beforeEach, describe, it, expect, vi } from "vitest";
+import { encrypt, decrypt, accessIdentity } from "../src/security";
 import {
   cleanHtml,
   candidates,
@@ -8,7 +8,39 @@ import {
   validateExtraction,
   type Mail,
 } from "../src/extraction";
+import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { gmailText } from "../src/providers";
+let privateKey: CryptoKey;
+beforeAll(async () => {
+  const pair = await generateKeyPair("RS256");
+  privateKey = pair.privateKey;
+  const jwk = await exportJWK(pair.publicKey);
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    if (
+      String(input) !== "https://test.cloudflareaccess.com/cdn-cgi/access/certs"
+    )
+      throw new Error("Unexpected network request");
+    return Response.json({
+      keys: [{ ...jwk, kid: "test", alg: "RS256", use: "sig" }],
+    });
+  });
+});
+async function assertion(overrides: Record<string, unknown> = {}) {
+  const now = Math.floor(Date.now() / 1000);
+  return new SignJWT({
+    email: "alexander@atlesque.media",
+    iss: env.ACCESS_TEAM_DOMAIN,
+    aud: env.ACCESS_AUD,
+    iat: now,
+    exp: now + 3600,
+    ...overrides,
+  })
+    .setProtectedHeader({ alg: "RS256", kid: "test" })
+    .sign(privateKey);
+}
+async function ownerHeaders() {
+  return { "Cf-Access-Jwt-Assertion": await assertion() };
+}
 const mail: Mail = {
   id: "message-1",
   subject: "Sign in",
@@ -97,22 +129,52 @@ describe("security and device API", () => {
       decrypt(encrypted.slice(0, -2) + "aa", env.ENCRYPTION_KEY),
     ).rejects.toThrow();
   });
-  it("rejects forged or expired admin sessions", async () => {
+  it("validates the owner, signature, issuer, audience and expiry", async () => {
     expect(
-      await admin(
+      await accessIdentity(
         new Request("https://codes.atlesque.dev", {
-          headers: { Cookie: "session=9999999999999.fake" },
+          headers: await ownerHeaders(),
         }),
-        env.ADMIN_TOKEN,
+        env,
+      ),
+    ).toBe(true);
+    for (const claims of [
+      { email: "other@example.com" },
+      { aud: "other-app" },
+      { iss: "https://evil.example" },
+      { exp: 1 },
+      { exp: undefined },
+    ]) {
+      expect(
+        await accessIdentity(
+          new Request("https://codes.atlesque.dev", {
+            headers: { "Cf-Access-Jwt-Assertion": await assertion(claims) },
+          }),
+          env,
+        ),
+      ).toBe(false);
+    }
+    const forged = await assertion();
+    expect(
+      await accessIdentity(
+        new Request("https://codes.atlesque.dev", {
+          headers: {
+            "Cf-Access-Jwt-Assertion": forged.slice(0, -8) + "AAAAAAAA",
+          },
+        }),
+        env,
       ),
     ).toBe(false);
-    const cookie = await session(env.ADMIN_TOKEN, Date.now() - 1);
     expect(
-      await admin(
+      await accessIdentity(
         new Request("https://codes.atlesque.dev", {
-          headers: { Cookie: "session=" + cookie },
+          headers: {
+            "Cf-Access-Authenticated-User-Email": "alexander@atlesque.media",
+            Authorization: "Bearer test-admin-secret",
+            Cookie: "session=9999999999999.fake",
+          },
         }),
-        env.ADMIN_TOKEN,
+        env,
       ),
     ).toBe(false);
   });
@@ -129,34 +191,76 @@ describe("security and device API", () => {
       expect(response.status).toBe(401);
     }
   });
-  it("protects admin endpoints and refuses cross-site login", async () => {
+  it("protects UI assets, management and OAuth routes without an admin-key fallback", async () => {
+    for (const path of [
+      "/",
+      "/app.js",
+      "/style.css",
+      "/api/status",
+      "/oauth/start/gmail",
+      "/oauth/callback/gmail",
+      "/api/login",
+    ]) {
+      expect(
+        (
+          await exports.default.fetch("https://codes.atlesque.dev" + path, {
+            headers: { Authorization: "Bearer test-admin-secret" },
+          })
+        ).status,
+      ).toBe(401);
+    }
     expect(
-      (await exports.default.fetch("https://codes.atlesque.dev/api/status"))
-        .status,
-    ).toBe(401);
+      (
+        await exports.default.fetch("https://codes.atlesque.dev/api/status", {
+          headers: await ownerHeaders(),
+        })
+      ).status,
+    ).toBe(200);
+  });
+  it("rejects cross-site mutations even with an Access token and bearer header", async () => {
+    expect(
+      (
+        await exports.default.fetch(
+          "https://codes.atlesque.dev/api/test-display",
+          {
+            method: "POST",
+            headers: {
+              ...(await ownerHeaders()),
+              Origin: "https://evil.example",
+              Authorization: "Bearer anything",
+            },
+            body: "{}",
+          },
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await exports.default.fetch(
+          "https://codes.atlesque.dev/api/test-display",
+          {
+            method: "POST",
+            headers: {
+              ...(await ownerHeaders()),
+              Origin: "https://codes.atlesque.dev",
+            },
+            body: "{}",
+          },
+        )
+      ).status,
+    ).toBe(200);
     expect(
       (
         await exports.default.fetch("https://codes.atlesque.dev/api/login", {
           method: "POST",
-          headers: { Origin: "https://evil.example" },
-          body: JSON.stringify({ token: env.ADMIN_TOKEN }),
+          headers: {
+            ...(await ownerHeaders()),
+            Origin: "https://codes.atlesque.dev",
+          },
+          body: "{}",
         })
       ).status,
-    ).toBe(403);
-  });
-  it("creates an HttpOnly admin session", async () => {
-    const response = await exports.default.fetch(
-      "https://codes.atlesque.dev/api/login",
-      {
-        method: "POST",
-        headers: { Origin: "https://codes.atlesque.dev" },
-        body: JSON.stringify({ token: env.ADMIN_TOKEN }),
-      },
-    );
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Set-Cookie")).toContain(
-      "HttpOnly; Secure; SameSite=Lax",
-    );
+    ).toBe(404);
   });
   it("selects the newest unexpired, undismissed code across mailboxes", async () => {
     const now = Date.now();
@@ -224,6 +328,7 @@ describe("security and device API", () => {
       (
         await exports.default.fetch(
           "https://codes.atlesque.dev/oauth/callback/gmail?state=bad&code=bad",
+          { headers: await ownerHeaders() },
         )
       ).status,
     ).toBe(400);

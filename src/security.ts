@@ -1,3 +1,5 @@
+import { createRemoteJWKSet, jwtVerify } from "jose";
+
 export function randomToken(): string {
   return [...crypto.getRandomValues(new Uint8Array(32))]
     .map((n) => n.toString(16).padStart(2, "0"))
@@ -48,36 +50,42 @@ export async function decrypt<T>(value: string, secret: string): Promise<T> {
   );
   return JSON.parse(new TextDecoder().decode(plain)) as T;
 }
-export async function session(
-  secret: string,
-  expires: number,
-): Promise<string> {
-  const k = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  return `${expires}.${b64(new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(String(expires)))))}`;
-}
-export async function admin(
+// Cache only public verification keys; never retain request identities or tokens.
+const keySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+export async function accessIdentity(
   request: Request,
-  secret: string,
+  env: Env,
 ): Promise<boolean> {
-  if (!secret) return false;
-  const bearer = request.headers.get("Authorization")?.replace(/^Bearer /, "");
-  if (bearer && (await equal(bearer, secret))) return true;
-  const value = request.headers
-    .get("Cookie")
-    ?.match(/(?:^|;\s*)session=([^;]+)/)?.[1];
-  if (!value) return false;
-  const expires = Number(value.split(".")[0]);
-  return (
-    Number.isSafeInteger(expires) &&
-    expires > Date.now() &&
-    (await equal(value, await session(secret, expires)))
-  );
+  const token = request.headers.get("Cf-Access-Jwt-Assertion");
+  if (!token || !env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD || !env.ACCESS_EMAIL)
+    return false;
+  try {
+    const issuer = new URL(env.ACCESS_TEAM_DOMAIN);
+    if (
+      issuer.protocol !== "https:" ||
+      !issuer.hostname.endsWith(".cloudflareaccess.com") ||
+      issuer.pathname !== "/" ||
+      issuer.search ||
+      issuer.hash ||
+      issuer.username ||
+      issuer.password
+    )
+      return false;
+    let keys = keySets.get(issuer.origin);
+    if (!keys) {
+      keys = createRemoteJWKSet(new URL("/cdn-cgi/access/certs", issuer));
+      keySets.set(issuer.origin, keys);
+    }
+    const { payload } = await jwtVerify(token, keys, {
+      issuer: issuer.origin,
+      audience: env.ACCESS_AUD,
+      algorithms: ["RS256"],
+      requiredClaims: ["exp", "iat", "email"],
+    });
+    return payload.email === env.ACCESS_EMAIL;
+  } catch {
+    return false;
+  }
 }
 export function json(data: unknown, status = 200): Response {
   return Response.json(data, {
