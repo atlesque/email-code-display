@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="stylesheet" href="/style.css" />
+    <title>Privacy · Email Code Display</title>
+  </head>
+  <body>
+    <main>
+      <a href="/">← Email Code Display</a>
+      <section class="panel">
+        <h1>Privacy details</h1>
+        <p>
+          This is a personal, self-hosted tool. The public repository contains
+          code, never mailbox credentials.
+        </p>
+        <h2>Mailbox access</h2>
+        <p>
+          Google Gmail read-only and Microsoft Graph Mail.Read permissions let
+          the Worker read recent inbox messages. It does not send, delete, or
+          mark messages read. Microsoft User.Read identifies the connected
+          account. OAuth refresh tokens are encrypted with AES-256-GCM in
+          Cloudflare D1.
+        </p>
+        <h2>Analysis</h2>
+        <p>
+          Messages containing possible access codes are analyzed using the
+          configured AI model through Cloudflare Workers AI. The subject,
+          sender, and up to 10,000 body characters are sent for classification.
+          Model caching and request logging are disabled for these calls. The
+          model host's current data handling terms still apply. Gemini can
+          optionally be configured and then sends these inputs to Google.
+        </p>
+        <h2>Retention</h2>
+        <p>
+          The Worker does not store full message bodies. Extracted codes are
+          encrypted and served only to the authenticated device. They expire
+          five minutes after the message was received and are removed during the
+          next successful scheduled cleanup. Message identifiers are kept for up
+          to one hour to avoid duplicate analysis. OAuth state expires after ten
+          minutes.
+        </p>
+        <h2>Disconnect</h2>
+        <p>
+          Disconnecting an inbox removes its local tokens, codes, and
+          processed-message identifiers. You can also revoke the application's
+          permissions from Google or Microsoft account settings. Browser admin
+          sessions expire after 24 hours.
+        </p>
+        <p>
+          A code visible on a desk can be read by someone nearby. Press D0 to
+          dismiss it immediately.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

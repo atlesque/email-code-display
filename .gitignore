@@ -1,0 +1,14 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+.env.*
+!.env.example
+!.dev.vars.example
+.private/
+firmware/**/secrets.h
+firmware/**/tls_ca.h
+build/
+*.bin
+*.elf
+*.map

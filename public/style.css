@@ -1,0 +1,249 @@
+:root {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  color: #213b36;
+  background: #f3f4ed;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 960px;
+  margin: auto;
+  padding: 32px;
+}
+header,
+.row,
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+header {
+  font-size: 13px;
+  margin-bottom: 78px;
+}
+a {
+  color: inherit;
+}
+.brand {
+  text-decoration: none;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.brand:first-letter {
+  color: #478374;
+}
+.intro {
+  margin-bottom: 50px;
+}
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  color: #56766c;
+}
+h1 {
+  font-size: clamp(42px, 7vw, 68px);
+  letter-spacing: -3px;
+  line-height: 1.06;
+  font-weight: 550;
+  margin: 18px 0 22px;
+}
+p {
+  color: #5d7169;
+  line-height: 1.65;
+  margin: 10px 0;
+  font-size: 15px;
+}
+.intro > p {
+  font-size: 18px;
+  max-width: 590px;
+}
+.pill {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+  margin-top: 18px;
+  padding: 9px 14px;
+  border: 1px solid #d7dfd3;
+  border-radius: 30px;
+}
+.pill i {
+  width: 7px;
+  height: 7px;
+  background: #548772;
+  border-radius: 50%;
+}
+.panel {
+  background: #fffef8;
+  border: 1px solid #dce2d5;
+  border-radius: 20px;
+  padding: 30px;
+  margin: 20px 0;
+  box-shadow: 0 4px 15px #23392c05;
+}
+h2 {
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 22px 0 8px;
+}
+input {
+  font: inherit;
+  width: 100%;
+  padding: 13px;
+  border: 1px solid #c8d4c7;
+  border-radius: 8px;
+  background: #fff;
+  outline-color: #478374;
+}
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #214d40;
+  border-radius: 9px;
+  background: #214d40;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 12px 18px;
+  text-decoration: none;
+  cursor: pointer;
+}
+form button {
+  margin-top: 14px;
+}
+.secondary {
+  background: transparent;
+  color: #214d40;
+  border-color: #bfcdbd;
+}
+button:disabled,
+.button.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 22px;
+}
+.account {
+  padding: 18px 0;
+  border-bottom: 1px solid #e2e6db;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.account strong {
+  font-size: 14px;
+}
+.account p {
+  font-size: 12px;
+  margin: 3px 0;
+}
+.account button {
+  padding: 8px 12px;
+  font-size: 11px;
+}
+.small {
+  font-size: 12px;
+}
+.tag {
+  font-size: 10px;
+  letter-spacing: 1px;
+  padding: 8px;
+  background: #e9eddf;
+  border-radius: 6px;
+}
+.display-preview {
+  max-width: 390px;
+  margin: 26px auto;
+  background: #102b2a;
+  border: 10px solid #243c39;
+  border-radius: 12px;
+  padding: 20px;
+  color: #c4e5c0;
+  font-family: monospace;
+  text-align: center;
+  box-shadow: 0 10px 25px #183e3414;
+}
+.display-heading {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #7fa798;
+}
+.display-code {
+  font-size: 48px;
+  letter-spacing: 4px;
+  padding: 12px 0;
+}
+.display-caption {
+  font-size: 9px;
+  color: #7fa798;
+}
+.notes {
+  padding: 20px 10px;
+}
+h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.notes p {
+  font-size: 13px;
+  max-width: 660px;
+}
+footer {
+  border-top: 1px solid #dce2d5;
+  padding: 25px 0;
+  margin-top: 35px;
+  color: #6b7c70;
+  font-size: 12px;
+}
+#message {
+  font-size: 13px;
+  color: #954c33;
+}
+[hidden] {
+  display: none !important;
+}
+@media (max-width: 600px) {
+  main {
+    padding: 22px;
+  }
+  header {
+    margin-bottom: 50px;
+  }
+  .brand {
+    font-size: 16px;
+  }
+  .panel {
+    padding: 22px;
+  }
+  .row {
+    align-items: flex-start;
+  }
+  h1 {
+    letter-spacing: -2px;
+  }
+  .account {
+    flex-wrap: wrap;
+  }
+}

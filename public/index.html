@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Email Code Display</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <a class="brand" href="/">▤ <span>Email Code Display</span></a
+        ><a href="https://github.com/atlesque/email-code-display">Source ↗</a>
+      </header>
+      <section class="intro">
+        <div class="eyebrow">YOUR INBOX, WITHIN REACH</div>
+        <h1>A small screen.<br />One less interruption.</h1>
+        <p>
+          One-time access codes from Gmail and Outlook, ready on your Feather
+          display.
+        </p>
+        <div class="pill"><i></i> Cloudflare · ESP32-S3 Reverse TFT</div>
+      </section>
+      <section id="login" class="panel">
+        <h2>Your private control panel</h2>
+        <p>Enter your admin key to connect mailboxes and check the display.</p>
+        <form id="login-form">
+          <label for="token">Admin key</label
+          ><input
+            id="token"
+            name="token"
+            type="password"
+            autocomplete="current-password"
+            required
+          /><button>Open control panel →</button>
+        </form>
+      </section>
+      <div id="dashboard" hidden>
+        <section class="panel">
+          <div class="row">
+            <div>
+              <h2>Connected inboxes</h2>
+              <p>Only new inbox messages are checked. Email stays unread.</p>
+            </div>
+            <button id="check" class="secondary">Check now</button>
+          </div>
+          <div id="accounts"></div>
+          <div class="actions">
+            <a id="gmail" class="button" href="/oauth/start/gmail"
+              >+ Connect Gmail</a
+            ><a
+              id="outlook"
+              class="button secondary"
+              href="/oauth/start/outlook"
+              >+ Connect Outlook</a
+            >
+          </div>
+          <p id="provider-status" class="small"></p>
+        </section>
+        <section class="panel">
+          <div class="row">
+            <div>
+              <h2>Your display</h2>
+              <p>240 × 135 pixels of useful calm.</p>
+            </div>
+            <span class="tag">FEATHER</span>
+          </div>
+          <div class="display-preview">
+            <div class="display-heading">EMAIL CODE DISPLAY</div>
+            <div class="display-code">123456</div>
+            <div class="display-caption">
+              Preview · codes disappear after 5 minutes
+            </div>
+          </div>
+          <div class="actions">
+            <button id="test">Send a display test</button
+            ><button id="logout" class="secondary">Sign out</button>
+          </div>
+          <p id="last-poll" class="small"></p>
+        </section>
+        <section class="notes">
+          <h3>Designed for a personal desk</h3>
+          <p>
+            Read-only inbox access. Encrypted account tokens. Code messages
+            analyzed through Cloudflare Workers AI. Codes expire after five
+            minutes, and the device uses its own key.
+          </p>
+          <p>
+            Press D0 on the Feather to dismiss a code. If Wi-Fi is disconnected,
+            codes still clear when their timer runs out.
+          </p>
+        </section>
+      </div>
+      <p id="message" role="status" aria-live="polite"></p>
+      <footer>
+        A personal, open-source tool.
+        <a href="/privacy.html">Privacy details</a>
+      </footer>
+    </main>
+  </body>
+</html>

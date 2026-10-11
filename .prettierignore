@@ -1,0 +1,7 @@
+node_modules
+.wrangler
+build
+.private
+.dev.vars
+worker-configuration.d.ts
+firmware

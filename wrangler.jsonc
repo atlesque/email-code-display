@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "email-code-display",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-11",
+  "account_id": "df08931372f873bc0c8edb7679dc0cf4",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "codes.atlesque.dev", "custom_domain": true }],
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+  },
+  "ai": { "binding": "AI" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "email-code-display",
+      "database_id": "d18a7931-e11a-4de5-9d04-7c8651481b83",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "vars": {
+    "PUBLIC_BASE_URL": "https://codes.atlesque.dev",
+    "GOOGLE_CLIENT_ID": "",
+    "MICROSOFT_CLIENT_ID": "",
+    "MICROSOFT_TENANT": "common",
+    "AI_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": {
+    "enabled": true,
+    "logs": { "invocation_logs": false },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 },
+  },
+}

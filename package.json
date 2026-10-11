@@ -1,0 +1,24 @@
+{
+  "name": "email-code-display",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc --noEmit",
+    "types": "wrangler types",
+    "test": "vitest run",
+    "db:local": "wrangler d1 migrations apply email-code-display --local",
+    "db:remote": "wrangler d1 migrations apply email-code-display --remote",
+    "firmware:compile": "arduino-cli compile --fqbn esp32:esp32:adafruit_feather_esp32s3_reversetft firmware/email_code_display"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.0",
+    "@types/node": "^26.6.5",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3",
+    "wrangler": "4.149.0"
+  }
+}

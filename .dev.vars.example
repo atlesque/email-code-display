@@ -1,0 +1,5 @@
+ADMIN_TOKEN=replace-with-64-random-hex-characters
+DEVICE_TOKEN=replace-with-another-64-random-hex-characters
+ENCRYPTION_KEY=replace-with-32-random-bytes-as-base64
+GOOGLE_CLIENT_SECRET=
+MICROSOFT_CLIENT_SECRET=
