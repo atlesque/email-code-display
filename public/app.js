@@ -54,7 +54,7 @@ async function refresh() {
     }
     if (!s.accounts.length) {
       const empty = document.createElement("p");
-      empty.textContent = "Connect your first inbox to get started.";
+      empty.textContent = "No inboxes connected.";
       $("accounts").append(empty);
     }
     for (const p of ["gmail", "outlook"]) {
@@ -65,19 +65,15 @@ async function refresh() {
       .filter(([, ready]) => !ready)
       .map(
         ([p]) =>
-          `${p === "gmail" ? "Google" : "Microsoft"} OAuth application still needs configuration.`,
+          `${p === "gmail" ? "Google" : "Microsoft"} OAuth not configured.`,
       )
       .join(" ");
     $("last-poll").textContent = s.lastPoll
-      ? "Last inbox check: " +
-        new Date(s.lastPoll).toLocaleString() +
-        " · Every minute"
-      : "Waiting for the first scheduled check.";
+      ? "Last check: " + new Date(s.lastPoll).toLocaleString()
+      : "No checks yet.";
   } catch (e) {
     $("dashboard").hidden = true;
-    message(
-      "Session expired or unavailable. Reload to sign in through Cloudflare Access.",
-    );
+    message("Session expired. Reload to sign in.");
   }
 }
 $("check").onclick = async () => {
@@ -91,17 +87,11 @@ $("check").onclick = async () => {
 $("test").onclick = async () => {
   try {
     await api("/api/test-display", {});
-    message("Test code sent. It will clear in one minute.");
+    message("Test code sent.");
   } catch (e) {
     message(e.message);
   }
 };
 
-$("today").textContent = new Date().toLocaleDateString(undefined, {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
 refresh();
 setInterval(refresh, 15000);

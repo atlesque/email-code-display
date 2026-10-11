@@ -70,7 +70,7 @@ header {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 48px;
+  margin-bottom: 24px;
 }
 .brand {
   display: inline-flex;
@@ -101,31 +101,11 @@ header {
   background: var(--surface-2);
 }
 
-/* Intro */
-.intro {
-  margin-bottom: 24px;
-}
-.date {
-  font-size: 13px;
-  color: var(--muted);
-  margin: 0 0 4px;
-}
-h1 {
-  font-size: clamp(26px, 4vw, 32px);
-  letter-spacing: -0.8px;
-  line-height: 1.2;
-  font-weight: 500;
-  margin: 0 0 8px;
-}
 p {
   color: var(--muted);
   line-height: 1.6;
   margin: 8px 0;
   font-size: 14px;
-}
-.intro > p:last-child {
-  font-size: 15px;
-  max-width: 520px;
 }
 
 /* Cards */
@@ -141,12 +121,6 @@ p {
   padding: 22px;
   box-shadow: var(--shadow);
   min-width: 0;
-}
-.notes {
-  grid-column: 1 / -1;
-}
-.notes p {
-  max-width: 680px;
 }
 .card-head {
   display: flex;
@@ -165,9 +139,6 @@ p {
 }
 .card-label svg {
   color: var(--muted);
-}
-.muted {
-  margin-top: 4px;
 }
 h2 {
   font-size: 17px;
@@ -240,7 +211,7 @@ button:disabled,
 
 /* Accounts */
 #accounts {
-  margin-top: 14px;
+  margin-top: 12px;
   background: var(--surface-2);
   border-radius: 14px;
   padding: 2px 14px;
@@ -313,13 +284,6 @@ button:disabled,
 .small:empty {
   display: none;
 }
-.tag {
-  font-size: 12px;
-  padding: 5px 10px;
-  color: var(--muted);
-  background: var(--surface-2);
-  border-radius: 999px;
-}
 
 /* Device preview stays a dark screen in both themes. */
 .display-preview {
@@ -341,10 +305,6 @@ button:disabled,
   font-size: clamp(34px, 6vw, 44px);
   letter-spacing: 4px;
   padding: 10px 0;
-}
-.display-caption {
-  font-size: 9px;
-  color: #8a8c84;
 }
 
 /* Footer and status */
@@ -400,7 +360,7 @@ footer {
     padding: 18px 16px 24px;
   }
   header {
-    margin-bottom: 32px;
+    margin-bottom: 18px;
   }
   .grid {
     grid-template-columns: minmax(0, 1fr);
