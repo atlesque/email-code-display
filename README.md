@@ -21,7 +21,7 @@ Node 24+, npm, and a Cloudflare account:
 ```sh
 npm ci
 cp .dev.vars.example .dev.vars
-# Generate unique random admin/device keys and a base64-encoded 32-byte encryption key.
+# Generate unique a random device key and a base64-encoded 32-byte encryption key.
 npm run types
 npm run db:local
 npm run dev
@@ -29,7 +29,7 @@ npm run check
 npm test
 ```
 
-The origin is configured to the production hostname. For local browser login and OAuth, change `PUBLIC_BASE_URL` to your local URL and register matching callback URLs. Cookies are Secure; use HTTPS when testing browser sessions.
+The origin is configured to the production hostname. For local browser login and OAuth, change `PUBLIC_BASE_URL` to your local URL and register matching callback URLs. The control panel fails closed without a valid Cloudflare Access JWT; use an Access-protected development hostname and its application audience for browser testing. OAuth cookies are Secure.
 
 Tests run in the Workers runtime and use local D1. Inference is mocked or excluded from tests, so tests do not submit real email to AI.
 
@@ -38,9 +38,10 @@ Tests run in the Workers runtime and use local D1. Inference is mocked or exclud
 1. Change `account_id`, hostname routes, and `PUBLIC_BASE_URL` in `wrangler.jsonc`.
 2. Run `npx wrangler d1 create email-code-display`, update the returned database ID, then `npm run db:remote`.
 3. Configure the OAuth applications below. Set client IDs in `wrangler.jsonc` and secrets using `npx wrangler secret put GOOGLE_CLIENT_SECRET` / `MICROSOFT_CLIENT_SECRET`.
-4. Set `ADMIN_TOKEN`, `DEVICE_TOKEN`, and `ENCRYPTION_KEY` as Worker secrets. Keep the encryption key backed up securely; changing it makes existing tokens unreadable until mailboxes reconnect.
-5. `npm run types && npm run check && npm test`, then `npm run deploy`.
-6. Sign in to the control panel using the admin key, connect inboxes, and select **Send a display test**.
+4. Set `DEVICE_TOKEN` and `ENCRYPTION_KEY` as Worker secrets. Keep the encryption key backed up securely; changing it makes existing tokens unreadable until mailboxes reconnect.
+5. Create a self-hosted Cloudflare Access application for the whole hostname with a reusable Allow policy including only `alexander@atlesque.media`. Add a more specific application for `YOUR_HOST/api/device/*` with a reusable Bypass/Everyone policy; these endpoints still require `DEVICE_TOKEN`. Set `ACCESS_TEAM_DOMAIN` to your HTTPS Cloudflare Access team URL, `ACCESS_AUD` to the control-panel application audience, and `ACCESS_EMAIL` to the allowed owner in `wrangler.jsonc`. Keep Workers.dev and preview URLs disabled.
+6. `npm run types && npm run check && npm test`, then `npm run deploy`.
+7. Sign in to the control panel through Cloudflare Access, connect inboxes, and select **Send a display test**.
 
 ### Gmail
 
@@ -92,6 +93,7 @@ The firmware keeps its five-second polling interval after successful checks, wit
 - The CPU runs at 80 MHz between requests and 240 MHz during network work. Unused board LEDs and the NeoPixel power rail are disabled.
 - The idle screen is dim and sleeps after 15 seconds. A new code wakes it automatically. Codes start at reduced brightness and dim further after 30 seconds; repeated polls do not reset that timer. D0 dismisses a visible code, or wakes an idle display and requests a check.
 - Only the countdown area redraws each second. The main loop yields for 50 ms between checks.
+- A tiny battery icon in the upper-right corner reads the onboard MAX17048 every 30 seconds. Its fill turns red at 20% or below. A dash means the gauge is unavailable (including older LC709203F boards); no charge estimate is invented. Battery updates do not wake the screen.
 - Failed service requests back off to 60 seconds; Wi-Fi reconnect attempts back off to 120 seconds. Successful checks restore five-second polling. Pending dismissals retry while the board remains powered, and codes continue to expire locally during outages. Slow network calls can temporarily delay button handling and screen expiry until the call returns.
 
 The stock Arduino core used here does not enable automatic CPU light sleep. Manually entering deep/light sleep between checks would disconnect Wi-Fi and add reconnect cost and latency, so this firmware uses connected modem sleep instead. See [Espressif power management](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/system/power_management.html) and [PWM backlight API](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/ledc.html).
@@ -102,8 +104,8 @@ On Macs with an incompatible bundled Arduino `ctags`, this sketch defines functi
 
 ## Security and limits
 
-- The admin key grants mailbox management. The device key can read/dismiss codes but cannot access OAuth credentials or connect mailboxes.
-- OAuth state is random, encrypted, browser-bound, single-use, and expires after ten minutes. Admin sessions are signed, HttpOnly, Secure, and expire after 24 hours.
+- Cloudflare Access grants mailbox management only to the configured owner. The Worker verifies the signed JWT, issuer, application audience, expiry, and email before serving UI assets, management APIs, or OAuth routes. The device key can read/dismiss codes but cannot access OAuth credentials or connect mailboxes.
+- OAuth state is random, encrypted, browser-bound, single-use, and expires after ten minutes. Cloudflare Access sessions expire after 24 hours; sign out through `/cdn-cgi/access/logout`.
 - No email bodies, tokens, or actual codes are written to application logs. Model caching/logging are disabled per request.
 - Recent inbox scans are capped at four pages of 50 messages per mailbox. Extremely busy inboxes may exceed this window. Gmail full messages larger than 2 MB are rejected for that check.
 - OTP detection is best-effort. Email wording, unusual formats, ambiguous codes, or model failures can cause misses. Rules support English and Dutch explicitly labelled codes.

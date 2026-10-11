@@ -5,6 +5,8 @@ async function api(path, body) {
     headers: body ? { "Content-Type": "application/json" } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (response.redirected || response.status === 401 || response.status === 403)
+    throw new Error("Cloudflare Access sign-in required");
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || "Request failed");
   return result;
@@ -15,7 +17,6 @@ function message(text) {
 async function refresh() {
   try {
     const s = await api("/api/status");
-    $("login").hidden = true;
     $("dashboard").hidden = false;
     $("accounts").replaceChildren();
     for (const account of s.accounts) {
@@ -69,22 +70,12 @@ async function refresh() {
         " · Every minute"
       : "Waiting for the first scheduled check.";
   } catch (e) {
-    $("login").hidden = false;
     $("dashboard").hidden = true;
-    if (e.message !== "Sign in first") message(e.message);
+    message(
+      "Session expired or unavailable. Reload to sign in through Cloudflare Access.",
+    );
   }
 }
-$("login-form").onsubmit = async (e) => {
-  e.preventDefault();
-  try {
-    await api("/api/login", { token: $("token").value });
-    $("token").value = "";
-    message("");
-    await refresh();
-  } catch (error) {
-    message(error.message);
-  }
-};
 $("check").onclick = async () => {
   try {
     await api("/api/check", {});
@@ -101,9 +92,6 @@ $("test").onclick = async () => {
     message(e.message);
   }
 };
-$("logout").onclick = async () => {
-  await api("/api/logout", {});
-  await refresh();
-};
+
 refresh();
 setInterval(refresh, 15000);

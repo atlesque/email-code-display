@@ -1,5 +1,5 @@
 import {
-  admin,
+  accessIdentity,
   boundedJson,
   decrypt,
   digest,
@@ -7,7 +7,6 @@ import {
   equal,
   json,
   randomToken,
-  session,
 } from "./security";
 import {
   emailAddress,
@@ -46,25 +45,11 @@ async function route(
   const url = new URL(request.url),
     path = url.pathname;
   if (path === "/health") return json({ ok: true });
-  if (path === "/api/login" && request.method === "POST") {
-    if (!sameOrigin(request, env))
-      return json({ error: "Invalid origin" }, 403);
-    const data = await boundedJson<{ token: string }>(
-      new Response(request.body),
-      4096,
-    );
-    if (
-      typeof data.token !== "string" ||
-      !env.ADMIN_TOKEN ||
-      !(await equal(data.token, env.ADMIN_TOKEN))
-    )
-      return json({ error: "Invalid admin key" }, 401);
-    const response = json({ ok: true });
-    response.headers.set(
-      "Set-Cookie",
-      `session=${await session(env.ADMIN_TOKEN, Date.now() + 86400000)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=86400`,
-    );
-    return response;
+  // Device endpoints retain their independent bearer key; every browser route
+  // (including assets and OAuth callbacks) requires a verified Access identity.
+  if (!path.startsWith("/api/device/")) {
+    if (!(await accessIdentity(request, env)))
+      return json({ error: "Cloudflare Access sign-in required" }, 401);
   }
   if (path.startsWith("/oauth/callback/")) {
     const p = provider(path.split("/").pop() ?? "");
@@ -163,13 +148,7 @@ async function route(
     return json({ error: "Not found" }, 404);
   }
   if (path.startsWith("/api/") || path.startsWith("/oauth/start/")) {
-    if (!(await admin(request, env.ADMIN_TOKEN)))
-      return json({ error: "Sign in first" }, 401);
-    if (
-      request.method !== "GET" &&
-      !sameOrigin(request, env) &&
-      !request.headers.has("Authorization")
-    )
+    if (request.method !== "GET" && !sameOrigin(request, env))
       return json({ error: "Invalid origin" }, 403);
     if (path === "/api/status") {
       const accounts = await env.DB.prepare(
@@ -194,14 +173,6 @@ async function route(
       ctx.waitUntil(poll(env));
       return json({ ok: true }, 202);
     }
-    if (path === "/api/logout" && request.method === "POST")
-      return new Response("{}", {
-        headers: {
-          "Set-Cookie":
-            "session=; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=0",
-          "Cache-Control": "no-store",
-        },
-      });
     if (path === "/api/accounts/disconnect" && request.method === "POST") {
       const { id } = await boundedJson<{ id: string }>(
         new Response(request.body),

@@ -6,6 +6,7 @@
   "account_id": "df08931372f873bc0c8edb7679dc0cf4",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
+  "preview_urls": false,
   "routes": [{ "pattern": "codes.atlesque.dev", "custom_domain": true }],
   "assets": {
     "directory": "public",
@@ -22,6 +23,9 @@
     },
   ],
   "vars": {
+    "ACCESS_TEAM_DOMAIN": "https://atlesque.cloudflareaccess.com",
+    "ACCESS_AUD": "145f58085029c9e1d0e57a0830cd97512fe31ce5080d7d4e41fd96b57de318bd",
+    "ACCESS_EMAIL": "alexander@atlesque.media",
     "PUBLIC_BASE_URL": "https://codes.atlesque.dev",
     "GOOGLE_CLIENT_ID": "426701478658-rtqlksv1thd4fl7vqh0o3ik4svehb8sk.apps.googleusercontent.com",
     "MICROSOFT_CLIENT_ID": "0c8a3602-21b5-46cc-9a34-f2ce40876183",

@@ -22,20 +22,6 @@
         </p>
         <div class="pill"><i></i> Cloudflare · ESP32-S3 Reverse TFT</div>
       </section>
-      <section id="login" class="panel">
-        <h2>Your private control panel</h2>
-        <p>Enter your admin key to connect mailboxes and check the display.</p>
-        <form id="login-form">
-          <label for="token">Admin key</label
-          ><input
-            id="token"
-            name="token"
-            type="password"
-            autocomplete="current-password"
-            required
-          /><button>Open control panel →</button>
-        </form>
-      </section>
       <div id="dashboard" hidden>
         <section class="panel">
           <div class="row">
@@ -75,7 +61,9 @@
           </div>
           <div class="actions">
             <button id="test">Send a display test</button
-            ><button id="logout" class="secondary">Sign out</button>
+            ><a href="/cdn-cgi/access/logout" class="button secondary"
+              >Sign out</a
+            >
           </div>
           <p id="last-poll" class="small"></p>
         </section>

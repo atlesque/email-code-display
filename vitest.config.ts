@@ -7,7 +7,8 @@ export default defineConfig({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
         bindings: {
-          ADMIN_TOKEN: "test-admin-secret",
+          ACCESS_TEAM_DOMAIN: "https://test.cloudflareaccess.com",
+          ACCESS_AUD: "test-audience",
           DEVICE_TOKEN: "test-device-secret",
           ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         },
