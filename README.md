@@ -43,6 +43,12 @@ Tests run in the Workers runtime and use local D1. Inference is mocked or exclud
 6. `npm run types && npm run check && npm test`, then `npm run deploy`.
 7. Sign in to the control panel through Cloudflare Access, connect inboxes, and select **Send a display test**.
 
+### Mail test
+
+**Send test email** sends a real email with a random six-digit code through [Cloudflare Email Service](https://developers.cloudflare.com/email-service/) from `MAIL_TEST_FROM` to `MAIL_TEST_TO`. The control panel then requests an inbox check every 15 seconds and reports how long the code took to reach the display, or stops after three minutes. `MAIL_TEST_TO` must be a connected inbox.
+
+The `MAIL_TEST` binding in `wrangler.jsonc` can send only from that sender to that recipient. Onboard the sender's domain once under **Compute → Email Service → Email Sending** in the Cloudflare dashboard; until then the test reports `E_SENDER_DOMAIN_NOT_AVAILABLE` or `E_SENDER_NOT_VERIFIED`.
+
 ### Gmail
 
 Enable Gmail API in a dedicated Google Cloud project. Configure Google Auth Platform branding/audience and a **Web application** OAuth client. Register:

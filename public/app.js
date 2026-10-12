@@ -68,6 +68,9 @@ async function refresh() {
           `${p === "gmail" ? "Google" : "Microsoft"} OAuth not configured.`,
       )
       .join(" ");
+    $("mail-test").title = s.mailTestTo
+      ? "Sends a real code email to " + s.mailTestTo
+      : "";
     $("last-poll").textContent = s.lastPoll
       ? "Last check: " + new Date(s.lastPoll).toLocaleString()
       : "No checks yet.";
@@ -93,6 +96,43 @@ $("test").onclick = async () => {
     message(e.message);
   }
 };
+// Sends a real email, then requests inbox checks until its code is on the display.
+const MAIL_TEST_CHECK_MS = 15000,
+  MAIL_TEST_TIMEOUT_MS = 180000;
+let mailTest = null;
+$("mail-test").onclick = async () => {
+  try {
+    $("mail-test").disabled = true;
+    const sent = await api("/api/test-mail", {});
+    mailTest = { ...sent, lastCheck: 0 };
+    message(`Sent code ${sent.code} to ${sent.to}. Waiting for the inbox…`);
+    trackMailTest();
+  } catch (e) {
+    $("mail-test").disabled = false;
+    message(e.message);
+  }
+};
+async function trackMailTest() {
+  if (!mailTest) return;
+  const elapsed = Date.now() - mailTest.sentAt;
+  if (screen.code === mailTest.code) {
+    message(
+      `Code ${mailTest.code} reached the display ${Math.round(elapsed / 1000)}s after sending.`,
+    );
+    mailTest = null;
+  } else if (elapsed > MAIL_TEST_TIMEOUT_MS) {
+    message(
+      `Code ${mailTest.code} did not reach the display within 3 minutes. Check ${mailTest.to}, including spam.`,
+    );
+    mailTest = null;
+  } else if (Date.now() - mailTest.lastCheck >= MAIL_TEST_CHECK_MS) {
+    mailTest.lastCheck = Date.now();
+    try {
+      await api("/api/check", {});
+    } catch {}
+  }
+  if (!mailTest) $("mail-test").disabled = false;
+}
 
 // Mirrors firmware/email_code_display/power_policy.h and fetchCode().
 const POLL_MS = 5000,
@@ -170,3 +210,4 @@ refresh().then(pollDisplay);
 setInterval(refresh, 15000);
 setInterval(pollDisplay, POLL_MS);
 setInterval(renderScreen, 250);
+setInterval(trackMailTest, 1000);

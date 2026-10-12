@@ -10,6 +10,7 @@ import {
 } from "../src/extraction";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { gmailText } from "../src/providers";
+import { poll } from "../src/poll";
 let privateKey: CryptoKey;
 beforeAll(async () => {
   const pair = await generateKeyPair("RS256");
@@ -365,5 +366,130 @@ describe("security and device API", () => {
         )
       ).status,
     ).toBe(400);
+  });
+});
+describe("mail test", () => {
+  it("sends a real-format code email and follows it to the device", async () => {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS processed (account_id TEXT,message_id TEXT,expires_at INTEGER,PRIMARY KEY(account_id,message_id)); CREATE TABLE IF NOT EXISTS leases (name TEXT PRIMARY KEY,owner TEXT,expires_at INTEGER); DELETE FROM processed; DELETE FROM leases;",
+    );
+    await env.DB.prepare(
+      "INSERT INTO accounts(id,provider,email,token,connected_at,status) VALUES('acct','gmail',?,?,?,'connected')",
+    )
+      .bind(
+        env.MAIL_TEST_TO,
+        await encrypt(
+          {
+            access_token: "gmail-token",
+            refresh_token: "refresh",
+            expires_at: Date.now() + 3600000,
+          },
+          env.ENCRYPTION_KEY,
+        ),
+        Date.now() - 60000,
+      )
+      .run();
+    // The sent message lands in the simulated Gmail inbox.
+    const inbox: { from: string; subject: string; text: string }[] = [];
+    const send = vi
+      .spyOn(env.MAIL_TEST, "send")
+      .mockImplementation(async (message) => {
+        const m = message as EmailMessageBuilder;
+        const from = m.from as { email: string; name: string };
+        inbox.push({
+          from: `${from.name} <${from.email}>`,
+          subject: m.subject,
+          text: m.text ?? "",
+        });
+        return { messageId: "sent-1" };
+      });
+    const ai = vi.spyOn(env.AI, "run").mockRejectedValue(new Error("offline"));
+    const certs = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (!url.startsWith("https://gmail.googleapis.com/"))
+        return certs(input, init);
+      if (url.includes("/messages?"))
+        return Response.json({
+          messages: inbox.map((_, i) => ({ id: "m" + i })),
+        });
+      const m = inbox[Number(url.match(/messages\/m(\d+)/)![1])];
+      return Response.json({
+        id: "m0",
+        internalDate: String(Date.now()),
+        payload: {
+          mimeType: "text/plain",
+          headers: [
+            { name: "From", value: m.from },
+            { name: "Subject", value: m.subject },
+          ],
+          body: { data: btoa(m.text) },
+        },
+      });
+    });
+    try {
+      const sent = (await (
+        await exports.default.fetch(
+          "https://codes.atlesque.dev/api/test-mail",
+          {
+            method: "POST",
+            headers: {
+              ...(await ownerHeaders()),
+              Origin: "https://codes.atlesque.dev",
+            },
+            body: "{}",
+          },
+        )
+      ).json()) as { to: string; code: string };
+      expect(sent.to).toBe("alexander@atlesque.media");
+      expect(sent.code).toMatch(/^\d{6}$/);
+      expect(send.mock.calls[0][0]).toMatchObject({
+        to: "alexander@atlesque.media",
+        from: { email: "codes@atlesque.dev" },
+      });
+      await poll(env);
+      const shown = (await (
+        await exports.default.fetch(
+          "https://codes.atlesque.dev/api/device/code",
+          { headers: { Authorization: "Bearer " + env.DEVICE_TOKEN } },
+        )
+      ).json()) as { code: string; service: string; provider: string };
+      expect(shown).toMatchObject({
+        code: sent.code,
+        service: "atlesque.dev",
+        provider: "gmail",
+      });
+    } finally {
+      vi.mocked(fetch).mockImplementation(certs);
+      send.mockRestore();
+      ai.mockRestore();
+    }
+  });
+  it("reports Email Service refusals without leaking details", async () => {
+    const send = vi
+      .spyOn(env.MAIL_TEST, "send")
+      .mockRejectedValue(
+        Object.assign(new Error("domain"), { code: "E_SENDER_NOT_VERIFIED" }),
+      );
+    try {
+      const response = await exports.default.fetch(
+        "https://codes.atlesque.dev/api/test-mail",
+        {
+          method: "POST",
+          headers: {
+            ...(await ownerHeaders()),
+            Origin: "https://codes.atlesque.dev",
+          },
+          body: "{}",
+        },
+      );
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual({
+        error:
+          "Cloudflare Email Service refused the test email (E_SENDER_NOT_VERIFIED)",
+      });
+    } finally {
+      send.mockRestore();
+    }
   });
 });
