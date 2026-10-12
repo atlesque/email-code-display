@@ -90,6 +90,7 @@ TLS uses the ESP32 core's public certificate bundle; no insecure TLS bypass is u
 The firmware keeps its five-second polling interval after successful checks, with an immediate first check when Wi-Fi and the clock are ready. The Worker still checks inboxes once per minute: typical arrival-to-display delay is therefore up to roughly 65 seconds, plus provider, extraction, and network time. Once the Worker has a code, the board usually picks it up within five seconds plus request time. These are healthy-network estimates, not hard deadlines.
 
 - Wi-Fi minimum modem sleep retains association; HTTP/1.1 reuses verified TLS connections when the server allows it. Responses are bounded to 4 KB and completely consumed before reuse.
+- The certificate bundle is reattached before every fresh HTTPS connection. This is required by Arduino-ESP32 3.3.2, whose connection teardown clears the bundle callback, including during Wi-Fi reconnects. Failed request diagnostics log only HTTP/TLS status and parsing errors, never response bodies or codes.
 - The CPU runs at 80 MHz between requests and 240 MHz during network work. Unused board LEDs and the NeoPixel power rail are disabled.
 - The idle screen is dim and sleeps after 15 seconds. A new code wakes it automatically. Codes start at reduced brightness and dim further after 30 seconds; repeated polls do not reset that timer. D0 dismisses a visible code, or wakes an idle display and requests a check.
 - Only the countdown area redraws each second. The main loop yields for 50 ms between checks.
@@ -99,6 +100,8 @@ The firmware keeps its five-second polling interval after successful checks, wit
 The stock Arduino core used here does not enable automatic CPU light sleep. Manually entering deep/light sleep between checks would disconnect Wi-Fi and add reconnect cost and latency, so this firmware uses connected modem sleep instead. See [Espressif power management](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/system/power_management.html) and [PWM backlight API](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/ledc.html).
 
 Run the host timing scenarios with `c++ -std=c++11 test/firmware_power.test.cpp -o /tmp/email-code-display-power-test && /tmp/email-code-display-power-test`, then compile the firmware as above. On the board, verify idle screen sleep, automatic code wake, dimming without repeated wakeups, D0 dismissal, reconnect recovery, and expiry during an outage. Measure current on battery power with USB disconnected, both before and after the change; battery runtime depends on capacity, signal strength, and code frequency and has not been measured here.
+
+The TLS reconnect regression test runs with `c++ -std=c++11 -Itest/firmware_stubs test/firmware_tls.test.cpp -o /tmp/email-code-display-tls-test && /tmp/email-code-display-tls-test`. It models the installed core's lost certificate callback and checks the actual client adapter after stop, failed handshake, and reconnection, including the virtual overload HTTPClient uses.
 
 On Macs with an incompatible bundled Arduino `ctags`, this sketch defines functions in dependency order. Compile with `--build-property tools.ctags.cmd.path=/usr/bin/true` to skip automatic prototype generation.
 
