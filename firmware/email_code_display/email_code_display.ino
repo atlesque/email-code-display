@@ -1,4 +1,5 @@
 #include "power_policy.h"
+#include "certificate_bundle_client.h"
 #include "secrets.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
@@ -16,7 +17,8 @@ extern const uint8_t
     x509_crt_bundle_start[] asm("_binary_x509_crt_bundle_start");
 extern const uint8_t x509_crt_bundle_end[] asm("_binary_x509_crt_bundle_end");
 Adafruit_ST7789 tft(TFT_CS, TFT_DC, TFT_RST);
-WiFiClientSecure tls;
+CertificateBundleClient tls(x509_crt_bundle_start,
+                           x509_crt_bundle_end - x509_crt_bundle_start);
 HTTPClient http;
 String codeId, code, service, provider, dismissedId, pendingDismissId,
     expiredId;
@@ -111,6 +113,7 @@ void wakeScreen() {
     tft.enableSleep(false);
     delay(120);
     screenSleeping = false;
+    Serial.println("Display awake");
   }
 }
 void renderFooter() {
@@ -166,6 +169,7 @@ void updateScreenPower() {
     if (!screenSleeping) {
       tft.enableSleep(true);
       screenSleeping = true;
+      Serial.println("Display asleep; code checks continue");
     }
   }
 }
@@ -181,9 +185,13 @@ int request(const String &path, JsonDocument &result, const String &body = "") {
     status = body.length() ? http.POST(body) : http.GET();
     if (status == 200) {
       ResponseBuffer buffer;
-      if (http.writeToStream(&buffer) < 0 ||
-          deserializeJson(result, buffer.value) != DeserializationError::Ok)
+      int bytes = http.writeToStream(&buffer);
+      DeserializationError parsed = deserializeJson(result, buffer.value);
+      if (bytes < 0 || parsed != DeserializationError::Ok) {
+        Serial.printf("Response decoding failed: stream=%d, bytes=%u, json=%s\n",
+                      bytes, unsigned(buffer.value.length()), parsed.c_str());
         status = -2;
+      }
     }
     if (status != 200)
       tls.stop();
@@ -191,6 +199,11 @@ int request(const String &path, JsonDocument &result, const String &body = "") {
   }
   setCpuFrequencyMhz(80);
   tickCode(); // Account for blocking network time.
+  if (status != 200) {
+    char tlsError[128];
+    int error = tls.lastError(tlsError, sizeof(tlsError));
+    Serial.printf("Device request failed: HTTP=%d, TLS=%d\n", status, error);
+  }
   return status;
 }
 bool fetchCode() {
@@ -276,8 +289,6 @@ void setup() {
   screenActivity = lastTick = millis();
   updateScreenPower();
   render();
-  tls.setCACertBundle(x509_crt_bundle_start,
-                      x509_crt_bundle_end - x509_crt_bundle_start);
   tls.setTimeout(5);
   tls.setHandshakeTimeout(5);
   http.useHTTP10(false);

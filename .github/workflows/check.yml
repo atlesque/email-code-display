@@ -14,3 +14,5 @@ jobs:
       - run: npm test
       - name: Firmware power and timing scenarios
         run: c++ -std=c++11 test/firmware_power.test.cpp -o /tmp/email-code-display-power-test && /tmp/email-code-display-power-test
+      - name: Firmware certificate bundle reconnect scenarios
+        run: c++ -std=c++11 -Itest/firmware_stubs test/firmware_tls.test.cpp -o /tmp/email-code-display-tls-test && /tmp/email-code-display-tls-test
