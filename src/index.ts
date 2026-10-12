@@ -34,6 +34,26 @@ function redirect(
 function sameOrigin(r: Request, env: Env): boolean {
   return r.headers.get("Origin") === env.PUBLIC_BASE_URL;
 }
+// The code the device shows: newest unexpired, undismissed code.
+async function currentCode(env: Env) {
+  const row = await env.DB.prepare(
+    "SELECT id,payload,expires_at FROM codes WHERE dismissed=0 AND expires_at>? ORDER BY received_at DESC LIMIT 1",
+  )
+    .bind(Date.now())
+    .first<{ id: string; payload: string; expires_at: number }>();
+  if (!row) return { code: null };
+  return {
+    id: row.id,
+    ...(await decrypt<Extracted & { provider: string }>(
+      row.payload,
+      env.ENCRYPTION_KEY,
+    )),
+    remainingSeconds: Math.max(
+      0,
+      Math.floor((row.expires_at - Date.now()) / 1000),
+    ),
+  };
+}
 function provider(value: string): Provider | null {
   return value === "gmail" || value === "outlook" ? value : null;
 }
@@ -114,25 +134,8 @@ async function route(
       !(await equal(supplied, env.DEVICE_TOKEN))
     )
       return json({ error: "Unauthorized" }, 401);
-    if (path === "/api/device/code" && request.method === "GET") {
-      const row = await env.DB.prepare(
-        "SELECT id,payload,expires_at FROM codes WHERE dismissed=0 AND expires_at>? ORDER BY received_at DESC LIMIT 1",
-      )
-        .bind(Date.now())
-        .first<{ id: string; payload: string; expires_at: number }>();
-      if (!row) return json({ code: null });
-      return json({
-        id: row.id,
-        ...(await decrypt<Extracted & { provider: string }>(
-          row.payload,
-          env.ENCRYPTION_KEY,
-        )),
-        remainingSeconds: Math.max(
-          0,
-          Math.floor((row.expires_at - Date.now()) / 1000),
-        ),
-      });
-    }
+    if (path === "/api/device/code" && request.method === "GET")
+      return json(await currentCode(env));
     if (path === "/api/device/dismiss" && request.method === "POST") {
       const data = await boundedJson<{ id: string }>(
         new Response(request.body),
@@ -169,6 +172,8 @@ async function route(
         model: env.AI_MODEL,
       });
     }
+    if (path === "/api/display" && request.method === "GET")
+      return json(await currentCode(env));
     if (path === "/api/check" && request.method === "POST") {
       ctx.waitUntil(poll(env));
       return json({ ok: true }, 202);

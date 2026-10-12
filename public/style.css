@@ -285,26 +285,79 @@ button:disabled,
   display: none;
 }
 
-/* Device preview stays a dark screen in both themes. */
+/* Device preview stays a dark screen in both themes and follows the
+   firmware's brightness steps: bright, dim, idle, then asleep (backlight off). */
 .display-preview {
+  display: block;
+  width: 100%;
   margin: 16px 0 0;
   background: #0e0f0d;
   border: 8px solid #262724;
   border-radius: 16px;
   padding: 18px;
+  aspect-ratio: 240 / 135;
   color: var(--accent);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-weight: 400;
   text-align: center;
+  cursor: default;
+  transition: background 0.4s;
+}
+.display-preview:hover {
+  filter: none;
+}
+.display-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  transition: opacity 0.4s;
+}
+.display-preview.dim .display-content {
+  opacity: 0.55;
+}
+.display-preview.idle .display-content {
+  opacity: 0.35;
+}
+.display-preview.asleep {
+  background: #050505;
+  cursor: pointer;
+}
+.display-preview.asleep .display-content {
+  opacity: 0;
 }
 .display-heading {
   font-size: 10px;
   letter-spacing: 2px;
   color: #8a8c84;
 }
+.display-service,
+.display-footer {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.display-footer {
+  color: #8a8c84;
+}
+.display-footer:empty,
+.display-code:empty {
+  display: none;
+}
 .display-code {
   font-size: clamp(34px, 6vw, 44px);
   letter-spacing: 4px;
-  padding: 10px 0;
+  color: #f4f4f1;
+}
+.display-preview.long .display-code {
+  font-size: clamp(22px, 4vw, 30px);
+  letter-spacing: 2px;
+}
+.badge.off {
+  background: var(--surface-2);
+  color: var(--muted);
 }
 
 /* Footer and status */

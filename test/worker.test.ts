@@ -297,6 +297,39 @@ describe("security and device API", () => {
     expect(result.code).toBe("001234");
     expect(result.remainingSeconds).toBeGreaterThan(0);
   });
+  it("serves the device's current code to the owner's display preview", async () => {
+    await env.DB.prepare("INSERT INTO codes VALUES(?,?,?,?,?,0)")
+      .bind(
+        "a",
+        "a",
+        await encrypt(
+          { code: "123456", service: "example.com", provider: "gmail" },
+          env.ENCRYPTION_KEY,
+        ),
+        Date.now(),
+        Date.now() + 60000,
+      )
+      .run();
+    const url = "https://codes.atlesque.dev/api/display";
+    expect(
+      (
+        await exports.default.fetch(url, {
+          headers: { Authorization: "Bearer " + env.DEVICE_TOKEN },
+        })
+      ).status,
+    ).toBe(401);
+    const result = (await (
+      await exports.default.fetch(url, { headers: await ownerHeaders() })
+    ).json()) as { id: string; code: string; remainingSeconds: number };
+    expect(result).toMatchObject({ id: "a", code: "123456" });
+    expect(result.remainingSeconds).toBeGreaterThan(0);
+    await env.DB.exec("UPDATE codes SET dismissed=1");
+    expect(
+      await (
+        await exports.default.fetch(url, { headers: await ownerHeaders() })
+      ).json(),
+    ).toEqual({ code: null });
+  });
   it("dismisses only the requested code", async () => {
     await env.DB.prepare("INSERT INTO codes VALUES(?,?,?,?,?,0)")
       .bind(
