@@ -16,6 +16,7 @@ import {
 } from "./providers";
 import { poll } from "./poll";
 import { extract, type Extracted } from "./extraction";
+import { sendMailTest } from "./mailtest";
 function redirect(
   path: string,
   env: Env,
@@ -170,6 +171,7 @@ async function route(
           ),
         },
         model: env.AI_MODEL,
+        mailTestTo: env.MAIL_TEST_TO,
       });
     }
     if (path === "/api/display" && request.method === "GET")
@@ -207,6 +209,25 @@ async function route(
         source: result?.source ?? null,
         ok: result?.code === "123456",
       });
+    }
+    if (path === "/api/test-mail" && request.method === "POST") {
+      try {
+        return json(await sendMailTest(env));
+      } catch (error) {
+        const code = (error as { code?: unknown }).code;
+        console.error(
+          JSON.stringify({ event: "mail_test_failed", code: String(code) }),
+        );
+        return json(
+          {
+            error:
+              typeof code === "string"
+                ? `Cloudflare Email Service refused the test email (${code})`
+                : "Test email could not be sent",
+          },
+          502,
+        );
+      }
     }
     if (path === "/api/test-display" && request.method === "POST") {
       const now = Date.now();

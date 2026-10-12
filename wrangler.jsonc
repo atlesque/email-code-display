@@ -14,6 +14,15 @@
     "run_worker_first": true,
   },
   "ai": { "binding": "AI" },
+  // Real test email through Cloudflare Email Service. The binding can only send
+  // from the onboarded test sender to the one connected test inbox.
+  "send_email": [
+    {
+      "name": "MAIL_TEST",
+      "destination_address": "alexander@atlesque.media",
+      "allowed_sender_addresses": ["codes@atlesque.dev"],
+    },
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -31,6 +40,8 @@
     "MICROSOFT_CLIENT_ID": "0c8a3602-21b5-46cc-9a34-f2ce40876183",
     "MICROSOFT_TENANT": "common",
     "AI_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
+    "MAIL_TEST_FROM": "codes@atlesque.dev",
+    "MAIL_TEST_TO": "alexander@atlesque.media",
   },
   "triggers": { "crons": ["* * * * *"] },
   "observability": {
