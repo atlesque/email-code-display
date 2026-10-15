@@ -49,6 +49,25 @@ Tests run in the Workers runtime and use local D1. Inference is mocked or exclud
 
 The `MAIL_TEST` binding in `wrangler.jsonc` can send only from that sender to that recipient. Onboard the sender's domain once under **Compute → Email Service → Email Sending** in the Cloudflare dashboard; until then the test reports `E_SENDER_DOMAIN_NOT_AVAILABLE` or `E_SENDER_NOT_VERIFIED`.
 
+### ntfy push (optional)
+
+Each new code can also be published to an [ntfy](https://ntfy.sh) server: the code is the message body and `<sender domain> code` is the title. The feature is off unless `NTFY_URL` is set. Every value is a Worker secret, so nothing is committed:
+
+| Secret                           | Required | Notes                                                                              |
+| -------------------------------- | -------- | ---------------------------------------------------------------------------------- |
+| `NTFY_URL`                       | yes      | Server base URL, e.g. `https://ntfy.example.com`. HTTPS only.                      |
+| `NTFY_TOPIC`                     | no       | Defaults to `email-codes`.                                                         |
+| `NTFY_TOKEN`                     | no       | Access token (`tk_...`), sent as a Bearer token. Takes precedence over a password. |
+| `NTFY_USERNAME`, `NTFY_PASSWORD` | no       | Basic auth, used only when no token is set.                                        |
+
+```sh
+npx wrangler secret put NTFY_URL
+npx wrangler secret put NTFY_TOKEN
+npx wrangler secret put NTFY_TOPIC   # optional
+```
+
+Secrets take effect without a redeploy. For local development, put the same keys in `.dev.vars`. A failed push is logged as `ntfy_failed` with the HTTP status only and never blocks the display. Codes are published once, when first stored; ntfy keeps them according to the server's cache settings, not the five-minute display window.
+
 ### Gmail
 
 Enable Gmail API in a dedicated Google Cloud project. Configure Google Auth Platform branding/audience and a **Web application** OAuth client. Register:
@@ -115,7 +134,7 @@ On Macs with an incompatible bundled Arduino `ctags`, this sketch defines functi
 
 - Cloudflare Access grants mailbox management only to the configured owner. The Worker verifies the signed JWT, issuer, application audience, expiry, and email before serving UI assets, management APIs, or OAuth routes. The device key can read/dismiss codes but cannot access OAuth credentials or connect mailboxes.
 - OAuth state is random, encrypted, browser-bound, single-use, and expires after ten minutes. Cloudflare Access sessions expire after 24 hours; sign out through `/cdn-cgi/access/logout`.
-- No email bodies, tokens, or actual codes are written to application logs. Model caching/logging are disabled per request.
+- No email bodies, tokens, or actual codes are written to application logs. With ntfy configured, codes leave Cloudflare for that server. Model caching/logging are disabled per request.
 - Recent inbox scans are capped at four pages of 50 messages per mailbox. Extremely busy inboxes may exceed this window. Gmail full messages larger than 2 MB are rejected for that check.
 - OTP detection is best-effort. Email wording, unusual formats, ambiguous codes, or model failures can cause misses. Rules support English and Dutch explicitly labelled codes.
 - The five-minute time window is display retention, not a claim about each provider's actual code validity.

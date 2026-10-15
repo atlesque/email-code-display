@@ -36,11 +36,12 @@
         <h2>Retention</h2>
         <p>
           The Worker does not store full message bodies. Extracted codes are
-          encrypted and served only to the authenticated device. They expire
+          encrypted and served only to the authenticated device, plus the
+          owner's ntfy server when that optional push is configured. They expire
           five minutes after the message was received and are removed during the
           next successful scheduled cleanup. Message identifiers are kept for up
           to one hour to avoid duplicate analysis. OAuth state expires after ten
-          minutes.
+          minutes. Pushed ntfy messages follow that server's cache settings.
         </p>
         <h2>Disconnect</h2>
         <p>

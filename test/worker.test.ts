@@ -11,6 +11,7 @@ import {
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { gmailText } from "../src/providers";
 import { poll } from "../src/poll";
+import { ntfyRequest } from "../src/ntfy";
 let privateKey: CryptoKey;
 beforeAll(async () => {
   const pair = await generateKeyPair("RS256");
@@ -490,6 +491,124 @@ describe("mail test", () => {
       });
     } finally {
       send.mockRestore();
+    }
+  });
+});
+describe("ntfy", () => {
+  const code = {
+    code: "001234",
+    service: "example.com",
+    source: "rules" as const,
+  };
+  it("stays off without NTFY_URL", () => {
+    expect(ntfyRequest({}, code)).toBeNull();
+    expect(ntfyRequest({ NTFY_URL: " ", NTFY_TOKEN: "tk_x" }, code)).toBeNull();
+  });
+  it("publishes the code with a token or a password", async () => {
+    const request = ntfyRequest(
+      {
+        NTFY_URL: "https://ntfy.example.com",
+        NTFY_TOKEN: "tk_secret",
+        NTFY_USERNAME: "agents",
+      },
+      code,
+    )!;
+    expect(request.url).toBe("https://ntfy.example.com/");
+    expect(request.headers.get("Authorization")).toBe("Bearer tk_secret");
+    expect(await request.json()).toEqual({
+      topic: "email-codes",
+      title: "example.com code",
+      message: "001234",
+      tags: ["key"],
+      priority: 4,
+    });
+    const basic = ntfyRequest(
+      {
+        NTFY_URL: "https://example.com/ntfy/",
+        NTFY_TOPIC: "otp",
+        NTFY_USERNAME: "agents",
+        NTFY_PASSWORD: "pw",
+      },
+      code,
+    )!;
+    expect(basic.url).toBe("https://example.com/ntfy/");
+    expect(basic.headers.get("Authorization")).toBe(
+      "Basic " + btoa("agents:pw"),
+    );
+    expect(((await basic.json()) as { topic: string }).topic).toBe("otp");
+    expect(
+      ntfyRequest({ NTFY_URL: "https://example.com" }, code)!.headers.has(
+        "Authorization",
+      ),
+    ).toBe(false);
+  });
+  it("refuses plain HTTP", () => {
+    expect(() =>
+      ntfyRequest({ NTFY_URL: "http://ntfy.example.com" }, code),
+    ).toThrow("HTTPS");
+  });
+  it("pushes each new code once from the inbox check", async () => {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS processed (account_id TEXT,message_id TEXT,expires_at INTEGER,PRIMARY KEY(account_id,message_id)); CREATE TABLE IF NOT EXISTS leases (name TEXT PRIMARY KEY,owner TEXT,expires_at INTEGER); DELETE FROM processed; DELETE FROM leases;",
+    );
+    await env.DB.prepare(
+      "INSERT INTO accounts(id,provider,email,token,connected_at,status) VALUES('acct','gmail','me@example.com',?,?,'connected')",
+    )
+      .bind(
+        await encrypt(
+          {
+            access_token: "gmail-token",
+            refresh_token: "refresh",
+            expires_at: Date.now() + 3600000,
+          },
+          env.ENCRYPTION_KEY,
+        ),
+        Date.now() - 60000,
+      )
+      .run();
+    const ai = vi.spyOn(env.AI, "run").mockRejectedValue(new Error("offline"));
+    const certs = vi.mocked(fetch).getMockImplementation()!;
+    const pushed: Request[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (input instanceof Request && input.url.startsWith("https://ntfy.")) {
+        pushed.push(input);
+        return Response.json({ id: "n1" });
+      }
+      const url = String(input);
+      if (!url.startsWith("https://gmail.googleapis.com/"))
+        return certs(input, init);
+      if (url.includes("/messages?"))
+        return Response.json({ messages: [{ id: "m0" }] });
+      return Response.json({
+        id: "m0",
+        internalDate: String(Date.now()),
+        payload: {
+          mimeType: "text/plain",
+          headers: [
+            { name: "From", value: mail.from },
+            { name: "Subject", value: mail.subject },
+          ],
+          body: { data: btoa(mail.text) },
+        },
+      });
+    });
+    try {
+      const configured = {
+        ...env,
+        NTFY_URL: "https://ntfy.example.com",
+        NTFY_TOKEN: "tk_secret",
+      };
+      await poll(configured);
+      await poll(configured);
+      expect(pushed).toHaveLength(1);
+      expect(await pushed[0].json()).toMatchObject({
+        topic: "email-codes",
+        message: "001234",
+        title: "example.com code",
+      });
+    } finally {
+      vi.mocked(fetch).mockImplementation(certs);
+      ai.mockRestore();
     }
   });
 });

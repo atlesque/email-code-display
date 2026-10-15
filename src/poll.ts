@@ -1,6 +1,7 @@
 import { access, messages, type Account } from "./providers";
 import { extract } from "./extraction";
 import { encrypt } from "./security";
+import { notifyNtfy } from "./ntfy";
 export async function poll(env: Env): Promise<void> {
   const now = Date.now(),
     owner = crypto.randomUUID();
@@ -54,7 +55,8 @@ export async function poll(env: Env): Promise<void> {
               ),
             );
           }
-          await env.DB.batch(statements);
+          const results = await env.DB.batch(statements);
+          if (code && results[1].meta.changes) await notifyNtfy(env, code);
         }
         await env.DB.prepare(
           "UPDATE accounts SET last_checked=?,status='connected' WHERE id=?",
