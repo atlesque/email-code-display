@@ -2,3 +2,10 @@ DEVICE_TOKEN=replace-with-another-64-random-hex-characters
 ENCRYPTION_KEY=replace-with-32-random-bytes-as-base64
 GOOGLE_CLIENT_SECRET=
 MICROSOFT_CLIENT_SECRET=
+# Optional ntfy push of each new code. Leave NTFY_URL unset to disable.
+# NTFY_URL=https://ntfy.example.com
+# NTFY_TOPIC=email-codes
+# NTFY_TOKEN=tk_...
+# Or, instead of a token:
+# NTFY_USERNAME=
+# NTFY_PASSWORD=
