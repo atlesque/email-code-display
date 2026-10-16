@@ -2,6 +2,24 @@ import { access, messages, type Account } from "./providers";
 import { extract } from "./extraction";
 import { encrypt } from "./security";
 import { notifyNtfy } from "./ntfy";
+// Cron fires once a minute. Checking the inboxes again every 15 s inside each
+// tick cuts the wait for a new code from about 30 s on average to about 8 s.
+export const POLL_INTERVAL_MS = 15000;
+export async function pollMinute(
+  env: Env,
+  start = Date.now(),
+  wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
+): Promise<void> {
+  for (let offset = 0; offset < 60000; offset += POLL_INTERVAL_MS) {
+    const delay = start + offset - Date.now();
+    if (delay > 0) await wait(delay);
+    try {
+      await poll(env);
+    } catch {
+      console.error(JSON.stringify({ event: "poll_failed" }));
+    }
+  }
+}
 export async function poll(env: Env): Promise<void> {
   const now = Date.now(),
     owner = crypto.randomUUID();
@@ -18,19 +36,21 @@ export async function poll(env: Env): Promise<void> {
     for (const account of accounts.results) {
       try {
         const token = await access(account, env);
-        for await (const mail of messages(account, token)) {
+        const seen = async (id: string) =>
+          Boolean(
+            await env.DB.prepare(
+              "SELECT 1 FROM processed WHERE account_id=? AND message_id=?",
+            )
+              .bind(account.id, id)
+              .first(),
+          );
+        for await (const mail of messages(account, token, seen)) {
           if (
             !Number.isFinite(mail.receivedAt) ||
             mail.receivedAt > now + 60000 ||
             mail.receivedAt + 5 * 60000 <= Date.now()
           )
             continue;
-          const seen = await env.DB.prepare(
-            "SELECT message_id FROM processed WHERE account_id=? AND message_id=?",
-          )
-            .bind(account.id, mail.id)
-            .first();
-          if (seen) continue;
           const code = await extract(mail, env);
           const statements = [
             env.DB.prepare(
