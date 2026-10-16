@@ -10,7 +10,7 @@ import {
 } from "../src/extraction";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { gmailText } from "../src/providers";
-import { poll } from "../src/poll";
+import { poll, pollMinute } from "../src/poll";
 import { ntfyRequest } from "../src/ntfy";
 let privateKey: CryptoKey;
 beforeAll(async () => {
@@ -569,6 +569,7 @@ describe("ntfy", () => {
     const ai = vi.spyOn(env.AI, "run").mockRejectedValue(new Error("offline"));
     const certs = vi.mocked(fetch).getMockImplementation()!;
     const pushed: Request[] = [];
+    let fullFetches = 0;
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       if (input instanceof Request && input.url.startsWith("https://ntfy.")) {
         pushed.push(input);
@@ -579,6 +580,7 @@ describe("ntfy", () => {
         return certs(input, init);
       if (url.includes("/messages?"))
         return Response.json({ messages: [{ id: "m0" }] });
+      fullFetches++;
       return Response.json({
         id: "m0",
         internalDate: String(Date.now()),
@@ -598,9 +600,13 @@ describe("ntfy", () => {
         NTFY_URL: "https://ntfy.example.com",
         NTFY_TOKEN: "tk_secret",
       };
-      await poll(configured);
-      await poll(configured);
+      const waits: number[] = [];
+      await pollMinute(configured, Date.now(), async (ms) => {
+        waits.push(ms);
+      });
+      expect(waits).toHaveLength(3);
       expect(pushed).toHaveLength(1);
+      expect(fullFetches).toBe(1);
       expect(await pushed[0].json()).toMatchObject({
         topic: "email-codes",
         message: "001234",

@@ -14,7 +14,7 @@ import {
   providerConfig,
   type Provider,
 } from "./providers";
-import { poll } from "./poll";
+import { poll, pollMinute } from "./poll";
 import { extract, type Extracted } from "./extraction";
 import { sendMailTest } from "./mailtest";
 function redirect(
@@ -325,7 +325,7 @@ export default {
       return json({ error: "Request failed; try again" }, 500);
     }
   },
-  async scheduled(_event, env, ctx) {
-    ctx.waitUntil(poll(env));
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(pollMinute(env, event.scheduledTime));
   },
 } satisfies ExportedHandler<Env>;

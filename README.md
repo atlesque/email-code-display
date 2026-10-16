@@ -1,6 +1,6 @@
 # Email Code Display
 
-Gmail and Outlook one-time access codes on an **Adafruit ESP32-S3 Reverse TFT Feather**. A personal Cloudflare Worker checks connected inboxes every minute; the board polls for the latest code every five seconds. Press **D0** to dismiss it.
+Gmail and Outlook one-time access codes on an **Adafruit ESP32-S3 Reverse TFT Feather**. A personal Cloudflare Worker checks connected inboxes every 15 seconds; the board polls for the latest code every five seconds. Press **D0** to dismiss it.
 
 Production deployment: https://codes.atlesque.dev
 
@@ -112,7 +112,7 @@ TLS uses the ESP32 core's public certificate bundle; no insecure TLS bypass is u
 
 ### Battery and response time
 
-The firmware keeps its five-second polling interval after successful checks, with an immediate first check when Wi-Fi and the clock are ready. The Worker still checks inboxes once per minute: typical arrival-to-display delay is therefore up to roughly 65 seconds, plus provider, extraction, and network time. Once the Worker has a code, the board usually picks it up within five seconds plus request time. These are healthy-network estimates, not hard deadlines.
+The firmware keeps its five-second polling interval after successful checks, with an immediate first check when Wi-Fi and the clock are ready. The Worker checks inboxes every 15 seconds (a once-a-minute cron that checks four times per run): typical arrival-to-display delay is therefore up to roughly 20 seconds, plus provider, extraction, and network time. Once the Worker has a code, the board usually picks it up within five seconds plus request time. These are healthy-network estimates, not hard deadlines.
 
 - Wi-Fi minimum modem sleep retains association; HTTP/1.1 reuses verified TLS connections when the server allows it. Responses are bounded to 4 KB and completely consumed before reuse.
 - The certificate bundle is reattached before every fresh HTTPS connection. This is required by Arduino-ESP32 3.3.2, whose connection teardown clears the bundle callback, including during Wi-Fi reconnects. Failed request diagnostics log only HTTP/TLS status and parsing errors, never response bodies or codes.
