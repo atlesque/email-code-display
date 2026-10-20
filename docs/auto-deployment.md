@@ -18,8 +18,11 @@ Cloudflare installs the npm dependencies before running the build command. A
 failed type check or test stops deployment. Runtime secrets remain configured on
 the Worker; they are not committed or copied into build variables.
 
-Apply new D1 migrations with `npm run db:remote` before deploying code that needs
-them. The automatic deployment command does not apply database migrations.
+`npm run deploy` applies pending D1 migrations before uploading the Worker, so a
+merge that adds a migration needs no manual step. A failed migration stops the
+deploy. This needs **D1 Edit** on the build token: in **My Profile → API Tokens**,
+edit `email-code-display build token` and add Account → D1 → Edit (Cloudflare's
+generated token does not include it).
 
 Manage the connection and commands in the Worker's **Settings → Builds** section.
 Inspect build results in **Deployments**.
