@@ -139,9 +139,11 @@ export function gmailText(part: Part): string {
       : cleanHtml(collect(part, "text/html").join("\n"))
   ).slice(0, 15000);
 }
+// `seen` skips already processed mail before Gmail's per-message fetch.
 export async function* messages(
   account: Account,
   token: string,
+  seen: (id: string) => Promise<boolean> = async () => false,
 ): AsyncGenerator<Mail> {
   const cutoff = Math.max(account.connected_at, Date.now() - 5 * 60000);
   if (account.provider === "gmail") {
@@ -161,6 +163,7 @@ export async function* messages(
         token,
       );
       for (const item of list.messages ?? []) {
+        if (await seen(item.id)) continue;
         const msg = await api<{
           id: string;
           internalDate: string;
@@ -206,7 +209,7 @@ export async function* messages(
       }>(url, token);
       for (const m of list.value) {
         const receivedAt = Date.parse(m.receivedDateTime);
-        if (receivedAt >= cutoff)
+        if (receivedAt >= cutoff && !(await seen(m.id)))
           yield {
             id: m.id,
             subject: m.subject ?? "",

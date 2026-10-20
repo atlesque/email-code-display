@@ -15,6 +15,7 @@ import {
   type Provider,
 } from "./providers";
 import { poll } from "./poll";
+import { hook, renewWatches } from "./push";
 import { extract, type Extracted } from "./extraction";
 import { sendMailTest } from "./mailtest";
 function redirect(
@@ -66,6 +67,9 @@ async function route(
   const url = new URL(request.url),
     path = url.pathname;
   if (path === "/health") return json({ ok: true });
+  // Mailbox push hooks authenticate the provider themselves (Pub/Sub OIDC
+  // token, Graph clientState); Access must bypass /hooks/*.
+  if (path.startsWith("/hooks/")) return hook(request, env, ctx, path);
   // Device endpoints retain their independent bearer key; every browser route
   // (including assets and OAuth callbacks) requires a verified Access identity.
   if (!path.startsWith("/api/device/")) {
@@ -120,7 +124,7 @@ async function route(
         Date.now(),
       )
       .run();
-    ctx.waitUntil(poll(env));
+    ctx.waitUntil(renewWatches(env).then(() => poll(env)));
     return redirect("/", env, {
       "Set-Cookie":
         "oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0",
@@ -189,6 +193,7 @@ async function route(
       await env.DB.batch([
         env.DB.prepare("DELETE FROM codes WHERE account_id=?").bind(id),
         env.DB.prepare("DELETE FROM processed WHERE account_id=?").bind(id),
+        env.DB.prepare("DELETE FROM watches WHERE account_id=?").bind(id),
         env.DB.prepare("DELETE FROM accounts WHERE id=?").bind(id),
       ]);
       return json({ ok: true });
@@ -326,6 +331,11 @@ export default {
     }
   },
   async scheduled(_event, env, ctx) {
-    ctx.waitUntil(poll(env));
+    ctx.waitUntil(
+      (async () => {
+        await renewWatches(env);
+        await poll(env, "unwatched");
+      })(),
+    );
   },
 } satisfies ExportedHandler<Env>;
