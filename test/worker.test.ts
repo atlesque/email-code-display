@@ -1,4 +1,9 @@
 import { env, exports } from "cloudflare:workers";
+import {
+  createExecutionContext,
+  waitOnExecutionContext,
+} from "cloudflare:test";
+import worker from "../src/index";
 import { beforeAll, beforeEach, describe, it, expect, vi } from "vitest";
 import { encrypt, decrypt, accessIdentity } from "../src/security";
 import {
@@ -10,7 +15,8 @@ import {
 } from "../src/extraction";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { gmailText } from "../src/providers";
-import { poll, pollMinute } from "../src/poll";
+import { poll } from "../src/poll";
+import { renewWatches } from "../src/push";
 import { ntfyRequest } from "../src/ntfy";
 let privateKey: CryptoKey;
 beforeAll(async () => {
@@ -19,7 +25,9 @@ beforeAll(async () => {
   const jwk = await exportJWK(pair.publicKey);
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     if (
-      String(input) !== "https://test.cloudflareaccess.com/cdn-cgi/access/certs"
+      String(input) !==
+        "https://test.cloudflareaccess.com/cdn-cgi/access/certs" &&
+      String(input) !== "https://www.googleapis.com/oauth2/v3/certs"
     )
       throw new Error("Unexpected network request");
     return Response.json({
@@ -52,10 +60,10 @@ const mail: Mail = {
 };
 beforeEach(async () => {
   await env.DB.exec(
-    "CREATE TABLE IF NOT EXISTS codes (id TEXT PRIMARY KEY,account_id TEXT,payload TEXT,received_at INTEGER,expires_at INTEGER,dismissed INTEGER DEFAULT 0); CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY,provider TEXT,email TEXT,token TEXT,connected_at INTEGER,last_checked INTEGER,status TEXT); CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY,value TEXT); CREATE TABLE IF NOT EXISTS oauth_states (id TEXT PRIMARY KEY,provider TEXT,verifier TEXT,expires_at INTEGER);",
+    "CREATE TABLE IF NOT EXISTS codes (id TEXT PRIMARY KEY,account_id TEXT,payload TEXT,received_at INTEGER,expires_at INTEGER,dismissed INTEGER DEFAULT 0); CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY,provider TEXT,email TEXT,token TEXT,connected_at INTEGER,last_checked INTEGER,status TEXT); CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY,value TEXT); CREATE TABLE IF NOT EXISTS oauth_states (id TEXT PRIMARY KEY,provider TEXT,verifier TEXT,expires_at INTEGER); CREATE TABLE IF NOT EXISTS watches (account_id TEXT PRIMARY KEY,subscription_id TEXT,secret TEXT,expires_at INTEGER NOT NULL DEFAULT 0,retry_at INTEGER NOT NULL DEFAULT 0);",
   );
   await env.DB.exec(
-    "DELETE FROM codes; DELETE FROM accounts; DELETE FROM settings; DELETE FROM oauth_states;",
+    "DELETE FROM codes; DELETE FROM accounts; DELETE FROM settings; DELETE FROM oauth_states; DELETE FROM watches;",
   );
 });
 describe("code extraction", () => {
@@ -600,11 +608,8 @@ describe("ntfy", () => {
         NTFY_URL: "https://ntfy.example.com",
         NTFY_TOKEN: "tk_secret",
       };
-      const waits: number[] = [];
-      await pollMinute(configured, Date.now(), async (ms) => {
-        waits.push(ms);
-      });
-      expect(waits).toHaveLength(3);
+      await poll(configured);
+      await poll(configured);
       expect(pushed).toHaveLength(1);
       expect(fullFetches).toBe(1);
       expect(await pushed[0].json()).toMatchObject({
@@ -615,6 +620,164 @@ describe("ntfy", () => {
     } finally {
       vi.mocked(fetch).mockImplementation(certs);
       ai.mockRestore();
+    }
+  });
+});
+describe("mailbox push hooks", () => {
+  const hooks = "https://codes.atlesque.dev/hooks/";
+  // Waits for the inbox check a hook starts, so it cannot spill into later tests.
+  async function callHook(path: string, init: RequestInit) {
+    const ctx = createExecutionContext();
+    const response = await worker.fetch!(
+      new Request(hooks + path, init) as Request<
+        unknown,
+        IncomingRequestCfProperties
+      >,
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    return response;
+  }
+  async function outlookAccount() {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS processed (account_id TEXT,message_id TEXT,expires_at INTEGER,PRIMARY KEY(account_id,message_id)); CREATE TABLE IF NOT EXISTS leases (name TEXT PRIMARY KEY,owner TEXT,expires_at INTEGER); DELETE FROM processed; DELETE FROM leases;",
+    );
+    await env.DB.prepare(
+      "INSERT INTO accounts(id,provider,email,token,connected_at,status) VALUES('out','outlook','me@hotmail.com',?,?,'connected')",
+    )
+      .bind(
+        await encrypt(
+          {
+            access_token: "graph-token",
+            refresh_token: "refresh",
+            expires_at: Date.now() + 3600000,
+          },
+          env.ENCRYPTION_KEY,
+        ),
+        Date.now() - 60000,
+      )
+      .run();
+  }
+  async function pubSubToken(overrides: Record<string, unknown> = {}) {
+    const now = Math.floor(Date.now() / 1000);
+    return new SignJWT({
+      iss: "https://accounts.google.com",
+      aud: hooks + "gmail",
+      email: "push@test.iam.gserviceaccount.com",
+      email_verified: true,
+      iat: now,
+      exp: now + 3600,
+      ...overrides,
+    })
+      .setProtectedHeader({ alg: "RS256", kid: "test" })
+      .sign(privateKey);
+  }
+  it("answers Graph's validation request without Access", async () => {
+    const response = await exports.default.fetch(
+      hooks + "outlook?validationToken=abc%20123",
+      { method: "POST" },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("abc 123");
+  });
+  it("subscribes Outlook once and accepts only its clientState", async () => {
+    await outlookAccount();
+    const certs = vi.mocked(fetch).getMockImplementation()!;
+    const created: { clientState: string; notificationUrl: string }[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "https://graph.microsoft.com/v1.0/subscriptions") {
+        created.push(JSON.parse(String(init?.body)));
+        return Response.json({
+          id: "sub-1",
+          expirationDateTime: new Date(Date.now() + 3 * 86400000).toISOString(),
+        });
+      }
+      if (url.startsWith("https://graph.microsoft.com/"))
+        return Response.json({ value: [] });
+      return certs(input, init);
+    });
+    try {
+      await renewWatches(env);
+      await renewWatches(env);
+      expect(created).toHaveLength(1);
+      expect(created[0].notificationUrl).toBe(hooks + "outlook");
+      const notify = (clientState: string) =>
+        callHook("outlook", {
+          method: "POST",
+          body: JSON.stringify({
+            value: [{ subscriptionId: "sub-1", clientState }],
+          }),
+        });
+      expect((await notify("wrong")).status).toBe(401);
+      expect((await notify(created[0].clientState)).status).toBe(202);
+    } finally {
+      vi.mocked(fetch).mockImplementation(certs);
+    }
+  });
+  it("accepts Gmail pushes only from the configured Pub/Sub identity", async () => {
+    const push = async (token?: string) =>
+      (
+        await callHook("gmail", {
+          method: "POST",
+          headers: token ? { Authorization: "Bearer " + token } : {},
+          body: "{}",
+        })
+      ).status;
+    expect(await push()).toBe(401);
+    expect(
+      await push(await pubSubToken({ aud: "https://other.example" })),
+    ).toBe(401);
+    expect(
+      await push(await pubSubToken({ email: "someone@example.com" })),
+    ).toBe(401);
+    expect(await push(await pubSubToken())).toBe(204);
+  });
+  it("leaves pushed accounts to the hooks and still checks the rest", async () => {
+    await outlookAccount();
+    await env.DB.prepare(
+      "INSERT INTO watches(account_id,subscription_id,secret,expires_at) VALUES('out','sub-1','s',?)",
+    )
+      .bind(Date.now() + 86400000)
+      .run();
+    const certs = vi.mocked(fetch).getMockImplementation()!;
+    const checked: string[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.startsWith("https://graph.microsoft.com/")) {
+        checked.push(url);
+        return Response.json({ value: [] });
+      }
+      return certs(input, init);
+    });
+    try {
+      await poll(env, "unwatched");
+      expect(checked).toHaveLength(0);
+      await poll(env);
+      expect(checked).toHaveLength(1);
+    } finally {
+      vi.mocked(fetch).mockImplementation(certs);
+    }
+  });
+  it("checks again when a push arrives during a running check", async () => {
+    await outlookAccount();
+    const certs = vi.mocked(fetch).getMockImplementation()!;
+    let checks = 0;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.startsWith("https://graph.microsoft.com/")) {
+        // A second request lands while the first holds the lease.
+        if (++checks === 1) await poll(env);
+        return Response.json({ value: [] });
+      }
+      return certs(input, init);
+    });
+    try {
+      await poll(env);
+      expect(checks).toBe(2);
+    } finally {
+      vi.mocked(fetch).mockImplementation(certs);
     }
   });
 });

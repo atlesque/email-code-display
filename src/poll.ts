@@ -2,25 +2,28 @@ import { access, messages, type Account } from "./providers";
 import { extract } from "./extraction";
 import { encrypt } from "./security";
 import { notifyNtfy } from "./ntfy";
-// Cron fires once a minute. Checking the inboxes again every 15 s inside each
-// tick cuts the wait for a new code from about 30 s on average to about 8 s.
-export const POLL_INTERVAL_MS = 15000;
-export async function pollMinute(
-  env: Env,
-  start = Date.now(),
-  wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
-): Promise<void> {
-  for (let offset = 0; offset < 60000; offset += POLL_INTERVAL_MS) {
-    const delay = start + offset - Date.now();
-    if (delay > 0) await wait(delay);
-    try {
-      await poll(env);
-    } catch {
-      console.error(JSON.stringify({ event: "poll_failed" }));
-    }
+// "unwatched" skips accounts with live push, for the cron's fallback check.
+export type PollScope = "all" | "unwatched";
+// A check requested while another runs is not dropped: the running check
+// sees the newer request after it releases the lease and checks again.
+export async function poll(env: Env, scope: PollScope = "all"): Promise<void> {
+  for (;;) {
+    const requested = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO settings(key,value) VALUES('poll_requested',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    )
+      .bind(String(requested))
+      .run();
+    if (!(await check(env, scope))) return;
+    const latest = await env.DB.prepare(
+      "SELECT value FROM settings WHERE key='poll_requested'",
+    ).first<{ value: string }>();
+    if (!(Number(latest?.value) > requested)) return;
+    scope = "all";
   }
 }
-export async function poll(env: Env): Promise<void> {
+// Returns false when another check holds the lease.
+async function check(env: Env, scope: PollScope): Promise<boolean> {
   const now = Date.now(),
     owner = crypto.randomUUID();
   const lease = await env.DB.prepare(
@@ -28,10 +31,14 @@ export async function poll(env: Env): Promise<void> {
   )
     .bind(owner, now + 15 * 60000, now)
     .first<{ owner: string }>();
-  if (!lease) return;
+  if (!lease) return false;
   try {
-    const accounts = await env.DB.prepare(
-      "SELECT * FROM accounts",
+    const accounts = await (
+      scope === "all"
+        ? env.DB.prepare("SELECT * FROM accounts")
+        : env.DB.prepare(
+            "SELECT a.* FROM accounts a LEFT JOIN watches w ON w.account_id=a.id WHERE w.expires_at IS NULL OR w.expires_at<=?",
+          ).bind(now)
     ).all<Account>();
     for (const account of accounts.results) {
       try {
@@ -118,4 +125,5 @@ export async function poll(env: Env): Promise<void> {
       .bind(owner)
       .run();
   }
+  return true;
 }

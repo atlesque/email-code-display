@@ -1,13 +1,13 @@
 # Email Code Display
 
-Gmail and Outlook one-time access codes on an **Adafruit ESP32-S3 Reverse TFT Feather**. A personal Cloudflare Worker checks connected inboxes every 15 seconds; the board polls for the latest code every five seconds. Press **D0** to dismiss it.
+Gmail and Outlook one-time access codes on an **Adafruit ESP32-S3 Reverse TFT Feather**. A personal Cloudflare Worker checks a connected inbox as soon as Gmail or Outlook reports new mail; the board polls for the latest code every five seconds. Press **D0** to dismiss it.
 
 Production deployment: https://codes.atlesque.dev
 
 ## How it works
 
 1. Connect one or more Gmail or Outlook mailboxes through OAuth with read-only mail permissions.
-2. The Worker checks new inbox messages, starting at the moment each account was connected. A five-minute lookback catches messages delayed between checks. It does not mark messages read.
+2. Gmail (through Pub/Sub) and Outlook (through a Microsoft Graph subscription) call the Worker when the inbox changes, and the Worker checks new inbox messages, starting at the moment each account was connected. A once-a-minute cron renews those subscriptions and checks any account without a live one. A five-minute lookback catches messages delayed between checks. It does not mark messages read.
 3. Likely code messages go to the configured model through the Cloudflare AI binding. The model classifies the email; the Worker accepts only high-confidence codes that appear verbatim in the message. A strict explicitly-labelled code extractor handles AI outages.
 4. Tokens and code payloads are encrypted using AES-256-GCM in D1. Message bodies are not stored. D1 leases serialize inbox checks.
 5. The board authenticates using its own key over verified HTTPS. It receives only a code, sender domain, provider, and remaining display time. Codes disappear five minutes after email arrival, including while offline.
@@ -39,7 +39,7 @@ Tests run in the Workers runtime and use local D1. Inference is mocked or exclud
 2. Run `npx wrangler d1 create email-code-display`, update the returned database ID, then `npm run db:remote`.
 3. Configure the OAuth applications below. Set client IDs in `wrangler.jsonc` and secrets using `npx wrangler secret put GOOGLE_CLIENT_SECRET` / `MICROSOFT_CLIENT_SECRET`.
 4. Set `DEVICE_TOKEN` and `ENCRYPTION_KEY` as Worker secrets. Keep the encryption key backed up securely; changing it makes existing tokens unreadable until mailboxes reconnect.
-5. Create a self-hosted Cloudflare Access application for the whole hostname with a reusable Allow policy including only `alexander@atlesque.media`. Add a more specific application for `YOUR_HOST/api/device/*` with a reusable Bypass/Everyone policy; these endpoints still require `DEVICE_TOKEN`. Set `ACCESS_TEAM_DOMAIN` to your HTTPS Cloudflare Access team URL, `ACCESS_AUD` to the control-panel application audience, and `ACCESS_EMAIL` to the allowed owner in `wrangler.jsonc`. Keep Workers.dev and preview URLs disabled.
+5. Create a self-hosted Cloudflare Access application for the whole hostname with a reusable Allow policy including only `alexander@atlesque.media`. Add a more specific application for `YOUR_HOST/api/device/*` with a reusable Bypass/Everyone policy; these endpoints still require `DEVICE_TOKEN`. Add the same Bypass application for `YOUR_HOST/hooks/*`; Gmail and Outlook push there, and each hook verifies its caller itself. Set `ACCESS_TEAM_DOMAIN` to your HTTPS Cloudflare Access team URL, `ACCESS_AUD` to the control-panel application audience, and `ACCESS_EMAIL` to the allowed owner in `wrangler.jsonc`. Keep Workers.dev and preview URLs disabled.
 6. `npm run types && npm run check && npm test`, then `npm run deploy`.
 7. Sign in to the control panel through Cloudflare Access, connect inboxes, and select **Send a display test**.
 
@@ -67,6 +67,25 @@ npx wrangler secret put NTFY_TOPIC   # optional
 ```
 
 Secrets take effect without a redeploy. For local development, put the same keys in `.dev.vars`. A failed push is logged as `ntfy_failed` with the HTTP status only and never blocks the display. Codes are published once, when first stored; ntfy keeps them according to the server's cache settings, not the five-minute display window.
+
+### Inbox push
+
+Outlook push needs no extra setup beyond the `/hooks/*` Access bypass: the Worker creates a Graph subscription for each Outlook account, renews it before it expires, and accepts only notifications carrying that subscription's random `clientState`.
+
+Gmail push needs a Pub/Sub topic in the same Google Cloud project as the OAuth client. Until both values below are set, Gmail accounts are checked by the once-a-minute cron.
+
+1. Enable the Cloud Pub/Sub API and create a topic, e.g. `gmail-codes`.
+2. On the topic, grant `gmail-api-push@system.gserviceaccount.com` the **Pub/Sub Publisher** role.
+3. Create a service account with no roles, e.g. `gmail-push`.
+4. Create a **push** subscription on the topic with endpoint `https://YOUR_HOST/hooks/gmail`, **Enable authentication** with that service account, and audience `https://YOUR_HOST/hooks/gmail`.
+5. Set the topic and service account:
+
+```sh
+npx wrangler secret put GMAIL_PUBSUB_TOPIC          # projects/PROJECT_ID/topics/gmail-codes
+npx wrangler secret put GMAIL_PUSH_SERVICE_ACCOUNT  # gmail-push@PROJECT_ID.iam.gserviceaccount.com
+```
+
+The next cron run calls Gmail's `watch` for each Gmail account and renews it daily. `/hooks/gmail` accepts only a Google-signed token for that service account and audience. A failed subscription is logged as `push_renewal_failed` and retried after an hour; the cron keeps checking that account meanwhile.
 
 ### Gmail
 
@@ -112,7 +131,7 @@ TLS uses the ESP32 core's public certificate bundle; no insecure TLS bypass is u
 
 ### Battery and response time
 
-The firmware keeps its five-second polling interval after successful checks, with an immediate first check when Wi-Fi and the clock are ready. The Worker checks inboxes every 15 seconds (a once-a-minute cron that checks four times per run): typical arrival-to-display delay is therefore up to roughly 20 seconds, plus provider, extraction, and network time. Once the Worker has a code, the board usually picks it up within five seconds plus request time. These are healthy-network estimates, not hard deadlines.
+The firmware keeps its five-second polling interval after successful checks, with an immediate first check when Wi-Fi and the clock are ready. With inbox push, the Worker checks a mailbox within seconds of the provider reporting new mail; accounts without push are checked once a minute. Add provider, extraction, and network time. Once the Worker has a code, the board usually picks it up within five seconds plus request time. These are healthy-network estimates, not hard deadlines.
 
 - Wi-Fi minimum modem sleep retains association; HTTP/1.1 reuses verified TLS connections when the server allows it. Responses are bounded to 4 KB and completely consumed before reuse.
 - The certificate bundle is reattached before every fresh HTTPS connection. This is required by Arduino-ESP32 3.3.2, whose connection teardown clears the bundle callback, including during Wi-Fi reconnects. Failed request diagnostics log only HTTP/TLS status and parsing errors, never response bodies or codes.

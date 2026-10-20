@@ -11,6 +11,8 @@ export default defineConfig({
           ACCESS_AUD: "test-audience",
           DEVICE_TOKEN: "test-device-secret",
           ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+          GMAIL_PUBSUB_TOPIC: "projects/test/topics/gmail",
+          GMAIL_PUSH_SERVICE_ACCOUNT: "push@test.iam.gserviceaccount.com",
         },
       },
     }),
