@@ -1,5 +1,7 @@
 import { boundedJson, decrypt, encrypt } from "./security";
 import { cleanHtml, type Mail } from "./extraction";
+// Short enough that a token refresh plus a mailbox call fit inside one check.
+const MAILBOX_TIMEOUT_MS = 8000;
 export type Provider = "gmail" | "outlook";
 export type Tokens = {
   access_token: string;
@@ -44,7 +46,7 @@ export async function exchange(
       client_id: cfg.id,
       client_secret: cfg.secret,
     }),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(MAILBOX_TIMEOUT_MS),
   });
   if (!response.ok) {
     await response.body?.cancel();
@@ -86,7 +88,7 @@ async function api<T>(url: string, token: string): Promise<T> {
       Authorization: `Bearer ${token}`,
       Prefer: 'outlook.body-content-type="text"',
     },
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(MAILBOX_TIMEOUT_MS),
   });
   if (!response.ok) {
     await response.body?.cancel();

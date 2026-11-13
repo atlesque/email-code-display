@@ -22,6 +22,11 @@ export async function poll(env: Env, scope: PollScope = "all"): Promise<void> {
     scope = "all";
   }
 }
+// Push and cron checks run in waitUntil(), which Cloudflare cancels about 30 s
+// after the response. A cancelled check never reaches its finally block, so the
+// lease must expire on its own before the next push arrives, or every check
+// until then is skipped and codes in that window are lost.
+export const LEASE_MS = 25000;
 // Returns false when another check holds the lease.
 async function check(env: Env, scope: PollScope): Promise<boolean> {
   const now = Date.now(),
@@ -29,15 +34,19 @@ async function check(env: Env, scope: PollScope): Promise<boolean> {
   const lease = await env.DB.prepare(
     "INSERT INTO leases(name,owner,expires_at) VALUES('poll',?,?) ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,expires_at=excluded.expires_at WHERE leases.expires_at<? RETURNING owner",
   )
-    .bind(owner, now + 15 * 60000, now)
+    .bind(owner, now + LEASE_MS, now)
     .first<{ owner: string }>();
   if (!lease) return false;
   try {
+    // Healthy accounts first, so a failing one can't use up the time budget
+    // before the others are checked.
     const accounts = await (
       scope === "all"
-        ? env.DB.prepare("SELECT * FROM accounts")
+        ? env.DB.prepare(
+            "SELECT * FROM accounts ORDER BY status<>'connected', last_checked DESC",
+          )
         : env.DB.prepare(
-            "SELECT a.* FROM accounts a LEFT JOIN watches w ON w.account_id=a.id WHERE w.expires_at IS NULL OR w.expires_at<=?",
+            "SELECT a.* FROM accounts a LEFT JOIN watches w ON w.account_id=a.id WHERE w.expires_at IS NULL OR w.expires_at<=? ORDER BY a.status<>'connected', a.last_checked DESC",
           ).bind(now)
     ).all<Account>();
     for (const account of accounts.results) {
