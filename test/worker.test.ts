@@ -15,7 +15,7 @@ import {
 } from "../src/extraction";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { gmailText } from "../src/providers";
-import { poll } from "../src/poll";
+import { LEASE_MS, poll } from "../src/poll";
 import { renewWatches } from "../src/push";
 import { ntfyRequest } from "../src/ntfy";
 let privateKey: CryptoKey;
@@ -756,6 +756,36 @@ describe("mailbox push hooks", () => {
       expect(checked).toHaveLength(0);
       await poll(env);
       expect(checked).toHaveLength(1);
+    } finally {
+      vi.mocked(fetch).mockImplementation(certs);
+    }
+  });
+  it("takes over a lease left behind by a cancelled check", async () => {
+    await outlookAccount();
+    const certs = vi.mocked(fetch).getMockImplementation()!;
+    let checks = 0;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input).startsWith("https://graph.microsoft.com/")) {
+        checks++;
+        return Response.json({ value: [] });
+      }
+      return certs(input, init);
+    });
+    try {
+      // A check that was cancelled mid-run never released its lease.
+      await env.DB.prepare(
+        "INSERT INTO leases(name,owner,expires_at) VALUES('poll','dead',?)",
+      )
+        .bind(Date.now() + LEASE_MS)
+        .run();
+      await poll(env);
+      expect(checks).toBe(0);
+      await env.DB.prepare("UPDATE leases SET expires_at=? WHERE name='poll'")
+        .bind(Date.now() - 1)
+        .run();
+      await poll(env);
+      expect(checks).toBe(1);
+      expect(LEASE_MS).toBeLessThan(30000);
     } finally {
       vi.mocked(fetch).mockImplementation(certs);
     }
