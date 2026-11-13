@@ -16,3 +16,28 @@ jobs:
         run: c++ -std=c++11 test/firmware_power.test.cpp -o /tmp/email-code-display-power-test && /tmp/email-code-display-power-test
       - name: Firmware certificate bundle reconnect scenarios
         run: c++ -std=c++11 -Itest/firmware_stubs test/firmware_tls.test.cpp -o /tmp/email-code-display-tls-test && /tmp/email-code-display-tls-test
+  # Every push to main that passes the checks goes live: D1 migrations, then the worker.
+  deploy:
+    needs: worker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'atlesque/email-code-display'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Require a Cloudflare API token
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Add a CLOUDFLARE_API_TOKEN secret (Edit Cloudflare Workers template plus D1: Edit) to deploy on merge."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run deploy

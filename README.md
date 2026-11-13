@@ -41,6 +41,8 @@ Tests run in the Workers runtime and use local D1. Inference is mocked or exclud
 4. Set `DEVICE_TOKEN` and `ENCRYPTION_KEY` as Worker secrets. Keep the encryption key backed up securely; changing it makes existing tokens unreadable until mailboxes reconnect.
 5. Create a self-hosted Cloudflare Access application for the whole hostname with a reusable Allow policy including only `alexander@atlesque.media`. Add a more specific application for `YOUR_HOST/api/device/*` with a reusable Bypass/Everyone policy; these endpoints still require `DEVICE_TOKEN`. Add the same Bypass application for `YOUR_HOST/hooks/*`; Gmail and Outlook push there, and each hook verifies its caller itself. Set `ACCESS_TEAM_DOMAIN` to your HTTPS Cloudflare Access team URL, `ACCESS_AUD` to the control-panel application audience, and `ACCESS_EMAIL` to the allowed owner in `wrangler.jsonc`. Keep Workers.dev and preview URLs disabled.
 6. `npm run types && npm run check && npm test`, then `npm run deploy`.
+
+This repository deploys itself: every push to `main` that passes the checks runs `npm run deploy` from GitHub Actions. It needs a `CLOUDFLARE_API_TOKEN` secret in the `production` environment (or the repository) made from the "Edit Cloudflare Workers" template with D1: Edit added. Forks don't deploy.
 7. Sign in to the control panel through Cloudflare Access, connect inboxes, and select **Send a display test**.
 
 ### Mail test
